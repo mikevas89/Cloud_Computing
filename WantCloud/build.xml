@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<project default="create_run_jar" name="Create Runnable Jar for Project WantCloud">
+    <!--this file was created by Eclipse Runnable JAR Export Wizard-->
+    <!--ANT 1.7 is required                                        -->
+    <target name="headnode-jar">
+        <jar destfile="./headnode.jar" filesetmanifest="mergewithoutmain">
+            <manifest>
+                <attribute name="Main-Class" value="cloudNodes.HeadNode"/>
+                <attribute name="Class-Path" value="."/>
+            </manifest>
+            <fileset dir="./"/>
+            <zipfileset excludes="META-INF/*.SF" src="../src/libraries/ganymed-ssh2-build210.jar"/>
+            <zipfileset excludes="META-INF/*.SF" src="../src/libraries/org.opennebula.client.jar"/>
+            <zipfileset excludes="META-INF/*.SF" src="../src/libraries/ws-commons-util-1.0.2.jar"/>
+            <zipfileset excludes="META-INF/*.SF" src="../src/libraries/xmlrpc-client-3.1.2.jar"/>
+            <zipfileset excludes="META-INF/*.SF" src="../src/libraries/xmlrpc-common-3.1.2.jar"/>
+        </jar>
+    </target>
+    <target name="client-jar">
+        <jar destfile="./userCreator.jar" filesetmanifest="mergewithoutmain">
+            <manifest>
+                <attribute name="Main-Class" value="client.UserCreator"/>
+                <attribute name="Class-Path" value="."/>
+            </manifest>
+            <fileset dir="./"/>
+            <zipfileset excludes="META-INF/*.SF" src="../src/libraries/ganymed-ssh2-build210.jar"/>
+            <zipfileset excludes="META-INF/*.SF" src="../src/libraries/org.opennebula.client.jar"/>
+            <zipfileset excludes="META-INF/*.SF" src="../src/libraries/ws-commons-util-1.0.2.jar"/>
+            <zipfileset excludes="META-INF/*.SF" src="../src/libraries/xmlrpc-client-3.1.2.jar"/>
+            <zipfileset excludes="META-INF/*.SF" src="../src/libraries/xmlrpc-common-3.1.2.jar"/>
+            <zipfileset excludes="META-INF/*.SF" src="../src/libraries/commons-math3-3.3.jar"/>	
+        </jar>
+    </target>
+    <target name="pingSender-jar">
+        <jar destfile="./pingSender.jar" filesetmanifest="mergewithoutmain">
+            <manifest>
+                <attribute name="Main-Class" value="cloudNodes.PingSender"/>
+                <attribute name="Class-Path" value="."/>
+            </manifest>
+            <fileset dir="./"/>
+        </jar>
+    </target>
+</project>
