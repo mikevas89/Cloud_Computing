@@ -1,7 +1,10 @@
 package cloudNodes;
 
+import java.io.BufferedWriter;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.io.PrintWriter;
 import java.util.ArrayList;
-
 import java.util.Iterator;
 import java.util.Map.Entry;
 import java.util.concurrent.ConcurrentHashMap;
@@ -40,7 +43,10 @@ public class PingMonitor implements Runnable {
 				//if the VM was at boot state and ping recieved set it to Run state
 				if((entry.getValue().getVmStatus() == VMstatus.Booting) && (entry.getValue().getLastPingSent()!=0)){
 					entry.getValue().setVmStatus(VMstatus.Running);
+					entry.getValue().setFirstPing(System.currentTimeMillis());
+					entry.getValue().setTimeToGetReady(entry.getValue().getFirstPing() - entry.getValue().getTimeOfAllocation());
 					System.out.println("PING MONITOR SET TO RUNNING:"+entry.getKey());
+					this.logVMPool();
 				}
 				
 				//check for expired ping
@@ -52,6 +58,26 @@ public class PingMonitor implements Runnable {
 					this.getVmUsers().remove(entry.getKey());
 				}
 			}
+		}
+	}
+	
+	public void logVMPool(){
+		
+		try (PrintWriter out = new PrintWriter(new BufferedWriter(
+				new FileWriter("logger.txt", true)))) {
+			// String logWorld = "----------"; // according to the needed output
+			System.out.println("Now printing VMpool");
+			out.println("Now printing VMpool");
+
+			for (Iterator<Entry<String, VMStats>> it = this.getVmPool()
+					.entrySet().iterator(); it.hasNext();) {
+				Entry<String, VMStats> entry = it.next();
+				System.out.println(entry.toString());
+				out.println(entry.toString());
+			}
+
+		} catch (IOException e) {
+			e.printStackTrace();
 		}
 	}
 	

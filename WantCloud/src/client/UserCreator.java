@@ -25,8 +25,16 @@ public class UserCreator {
 
 		UserCreator usercreator = new UserCreator();
 
-		usercreator.createDistribution();
+		//usercreator.createDistribution();
+		usercreator.createUsers(10);
 
+	}
+	
+	public void createUsers(int num){
+		
+		for(int i=0; i<num; i++){
+			this.createUser(0);
+		}
 	}
 
 	public void createDistribution() {

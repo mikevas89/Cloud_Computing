@@ -10,17 +10,21 @@ public class VMStats {
 	private VMstatus vmStatus; //status of VM, returned from openNebula
 	private long lastPingSent; //last time Vm sent ping
 	private int numRegisteredUsers; //number of users in the VM
+	private long firstPing;
+	private long timeOfAllocation;
+	private long timeToGetReady;
 	
 
 	
 	public VMStats(int vmID, VirtualMachine vmInstance, String vmIP,
-			VMstatus vmStatus, int numRegisteredUsers) {
+			VMstatus vmStatus, int numRegisteredUsers, long timeOfAllocation) {
 		this.vmID = vmID;
 		this.vmInstance = vmInstance;
 		this.vmIP = vmIP;
 		this.vmStatus = vmStatus;
 		this.setLastPingSent(0);
 		this.numRegisteredUsers = numRegisteredUsers;
+		this.timeOfAllocation = timeOfAllocation;
 	}
 
 
@@ -90,11 +94,51 @@ public class VMStats {
 		return true;
 	}
 
+	
+
+
+
 	@Override
 	public String toString() {
-		return "VMStats [vmID=" + vmID + ", vmIP=" + vmIP + ", vmStatus="
-				+ vmStatus + ", lastPingSent=" + lastPingSent
-				+ ", numRegisteredUsers=" + numRegisteredUsers + "]";
+		return "VMStats [vmID=" + vmID + ", firstPing=" + firstPing
+				+ ", timeOfAllocation=" + timeOfAllocation
+				+ ", timeToGetReady=" + timeToGetReady + "]";
+	}
+
+
+
+	public long getFirstPing() {
+		return firstPing;
+	}
+
+
+
+	public void setFirstPing(long firstPing) {
+		this.firstPing = firstPing;
+	}
+
+
+
+	public long getTimeOfAllocation() {
+		return timeOfAllocation;
+	}
+
+
+
+	public void setTimeOfAllocation(long timeOfAllocation) {
+		this.timeOfAllocation = timeOfAllocation;
+	}
+
+
+
+	public long getTimeToGetReady() {
+		return timeToGetReady;
+	}
+
+
+
+	public void setTimeToGetReady(long timeToGetReady) {
+		this.timeToGetReady = timeToGetReady;
 	}
 
 	
