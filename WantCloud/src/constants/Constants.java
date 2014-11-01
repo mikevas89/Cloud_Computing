@@ -11,6 +11,8 @@ public class Constants {
 	public static final int HEADNODE_ID= -1;
 	
 	public static final long PING_PERIOD = 3000;
+	//public static final long USER_REQUEST_PERIOD = 3000;
+	
 	
 	public static final long PING_MONITOR_CHECKING_PERIOD =PING_PERIOD /5;
 	public static final long PING_TIMEOUT =PING_PERIOD *8;

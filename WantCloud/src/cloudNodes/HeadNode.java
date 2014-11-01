@@ -2,6 +2,7 @@ package cloudNodes;
 
 import interfaces.ServerClientRMI;
 
+
 import java.io.File;
 import java.net.MalformedURLException;
 import java.rmi.AlreadyBoundException;
@@ -37,6 +38,18 @@ public class HeadNode {
 
 	private CopyOnWriteArrayList<RequestMessage> requestQueue;
 
+	//job completion time stats
+	private int completedJobs;
+	private double avgCompletionTime;
+	
+	
+	//user requests stats
+	private int sumAvgRequestRatio;
+	private int numAvgRequestForRatio;
+	private int numWindowRequestsForRatio;
+	private long windowTimeForRatio;
+	
+	
 	// Logger
 	// TODO : put logStatus() to right places
 	// private Vector<String> logger;
@@ -46,6 +59,16 @@ public class HeadNode {
 	public ServerRMI comm;
 
 	public HeadNode() {
+		
+		
+		//initialization of variables
+		this.setCompletedJobs(0);
+		this.setAvgCompletionTime(0);
+		this.setSumRequestRatio(0);
+		this.setNumAvgRequestForRatio(0);
+		this.setNumWindowRequestsForRatio(0);
+		this.setWindowTimeForRatio(System.currentTimeMillis());
+		
 
 		// initialize control structures
 		requests = new LinkedBlockingQueue<RequestMessage>();
@@ -83,8 +106,7 @@ public class HeadNode {
 		 Create thread for monitoring the VMs
 		 ----------------------------------------------------
 		 */
-		Runnable VmMonitor = new VmMonitor(this.getVmPool(), this.getVmUsers(),
-				this.getRequestQueue(), Policy.Simple);
+		Runnable VmMonitor = new VmMonitor(this, Policy.Simple);
 		new Thread(VmMonitor).start();
 
 	}
@@ -113,6 +135,7 @@ public class HeadNode {
 				// deletes the registered user from the VM IP that user sent
 				this.deleteUser(new RegisteredUser(request.getSenderID(),
 						request.getVmIP()));
+				this.updateAvgJobCompletion(request.getExecutionJobTime());
 				break;
 			default:
 				break;
@@ -126,9 +149,9 @@ public class HeadNode {
 
 		final RequestMessage request = message;
 
-		// check VM if available room for new job
-		// String availableVMIP = this.choosePolicy();
-
+		//new request for time window
+		this.numWindowRequestsForRatio++;		
+		
 		// add request to request queue
 		this.getRequestQueue().add(request);
 
@@ -190,6 +213,13 @@ public class HeadNode {
 			e.printStackTrace();
 			return false;
 		}
+	}
+	
+	//re-calculate average of job execution times
+	public void updateAvgJobCompletion(long execTime){
+		this.completedJobs++;
+		this.setAvgCompletionTime(this.avgCompletionTime * ((double)(this.completedJobs-1))/this.completedJobs 
+				+ (double) (execTime) / this.completedJobs);
 	}
 
 	/*---------------------------------------------------
@@ -342,6 +372,57 @@ public class HeadNode {
 			e.printStackTrace();
 		}
 		return;
+	}
+
+	public int getCompletedJobs() {
+		return completedJobs;
+	}
+
+	public double getAvgCompletionTime() {
+		return avgCompletionTime;
+	}
+
+	public void setCompletedJobs(int completedJobs) {
+		this.completedJobs = completedJobs;
+	}
+
+	public void setAvgCompletionTime(double avgCompletionTime) {
+		this.avgCompletionTime = avgCompletionTime;
+	}
+
+	public int getSumRequestRatio() {
+		return sumAvgRequestRatio;
+	}
+	
+	public void addToSumRequestRatio(int requests) {
+		this.sumAvgRequestRatio  = this.sumAvgRequestRatio + requests;
+	}
+
+	public int getNumWindowRequestsForRatio() {
+		return numWindowRequestsForRatio;
+	}
+
+	public long getWindowTimeForRatio() {
+		return windowTimeForRatio;
+	}
+
+	public void setSumRequestRatio(int avgRequestRatio) {
+		this.sumAvgRequestRatio = avgRequestRatio;
+	}
+
+	public void setNumWindowRequestsForRatio(int numRequestsForRatio) {
+		this.numWindowRequestsForRatio = numRequestsForRatio;
+	}
+
+	public void setWindowTimeForRatio(long windowTimeForRatio) {
+		this.windowTimeForRatio = windowTimeForRatio;
+	}
+	public int getNumAvgRequestForRatio() {
+		return numAvgRequestForRatio;
+	}
+
+	public void setNumAvgRequestForRatio(int numAvgRequestForRatio) {
+		this.numAvgRequestForRatio = numAvgRequestForRatio;
 	}
 
 }

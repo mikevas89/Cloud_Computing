@@ -33,17 +33,15 @@ public class VmMonitor implements Runnable {
 
 	private CopyOnWriteArrayList<RequestMessage> requestQueue;
 	private ConcurrentHashMap<String, VMStats> vmPool; // statistics of VM
-	private ConcurrentHashMap<String, ArrayList<RegisteredUser>> vmUsers; // registered
-																			// clients
+	private ConcurrentHashMap<String, ArrayList<RegisteredUser>> vmUsers; // registered clients
+	private HeadNode headnode;
 	private Policy policy;
 
 	// POLICY is assigned by HeadNode
-	public VmMonitor(ConcurrentHashMap<String, VMStats> vmPool,
-			ConcurrentHashMap<String, ArrayList<RegisteredUser>> vmUsers,
-			CopyOnWriteArrayList<RequestMessage> requestQueue, Policy policy) {
-		this.requestQueue = requestQueue;
-		this.setVmPool(vmPool);
-		this.setVmUsers(vmUsers);
+	public VmMonitor(HeadNode headnode, Policy policy) {
+		this.requestQueue = headnode.getRequestQueue();
+		this.setVmPool(headnode.getVmPool());
+		this.setVmUsers(headnode.getVmUsers());
 		this.setPolicy(policy);
 	}
 
@@ -57,11 +55,21 @@ public class VmMonitor implements Runnable {
 			} catch (InterruptedException e) {
 				e.printStackTrace();
 			}
+			
+			//check window time of userRequests ratio to update it
+			//window Time for calculating user requests is at least the booting time of VMs
+			//start update the ratio when first VM is running 
+			if(System.currentTimeMillis() - this.headnode.getWindowTimeForRatio() > this.getAvgBootingTime() && this.availableVM()){
+				this.headnode.addToSumRequestRatio(this.headnode.getNumWindowRequestsForRatio());
+				this.headnode.setNumAvgRequestForRatio(this.headnode.getNumAvgRequestForRatio()+1);
+				
+				this.headnode.setNumWindowRequestsForRatio(0);
+				this.headnode.setWindowTimeForRatio(System.currentTimeMillis());
+			}
+			
 
 			if (this.getRequestQueue().size() <= 0)
 				continue;
-
-			System.out.println(this.getRequestQueue().size());
 			// apply selected policy
 			switch (this.getPolicy()) {
 			case Simple:
@@ -415,6 +423,25 @@ public class VmMonitor implements Runnable {
 		}
 
 	}
+
+	
+	public long getAvgBootingTime(){
+		
+		long sumBootTimes=0;
+		
+		for (Iterator<Entry<String, VMStats>> it = this.getVmPool().entrySet().iterator();
+				it.hasNext();) {
+			VMStats entry = it.next().getValue();
+			sumBootTimes+= entry.getTimeToGetReady();		
+		}		
+		return Math.round((double)sumBootTimes /this.getVmPool().size()) ;
+	}
+	
+	
+	public int getUserRequestRatio(){
+		return (int) Math.ceil((double) this.headnode.getSumRequestRatio()/ this.headnode.getNumAvgRequestForRatio());
+	}
+	
 
 	/*---------------------------------------------------
 	 *			 GETTERS AND SETTERS

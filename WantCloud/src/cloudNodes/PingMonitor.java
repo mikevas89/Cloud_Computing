@@ -40,10 +40,10 @@ public class PingMonitor implements Runnable {
 			for(Iterator<Entry<String,VMStats>> it= this.getVmPool().entrySet().iterator();it.hasNext();){
 				Entry<String, VMStats> entry = it.next();
 				
-				//if the VM was at boot state and ping recieved set it to Run state
+				//if the VM was at boot state and ping received set it to Run state
 				if((entry.getValue().getVmStatus() == VMstatus.Booting) && (entry.getValue().getLastPingSent()!=0)){
 					entry.getValue().setVmStatus(VMstatus.Running);
-					entry.getValue().setFirstPing(System.currentTimeMillis());
+					entry.getValue().setFirstPing(entry.getValue().getLastPingSent());
 					entry.getValue().setTimeToGetReady(entry.getValue().getFirstPing() - entry.getValue().getTimeOfAllocation());
 					System.out.println("PING MONITOR SET TO RUNNING:"+entry.getKey());
 					this.logVMPool();
