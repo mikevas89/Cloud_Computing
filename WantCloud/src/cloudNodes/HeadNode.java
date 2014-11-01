@@ -84,7 +84,7 @@ public class HeadNode {
 		 ----------------------------------------------------
 		 */
 		Runnable VmMonitor = new VmMonitor(this.getVmPool(), this.getVmUsers(),
-				this.getRequestQueue(), Policy.SuperSimple);
+				this.getRequestQueue(), Policy.Simple);
 		new Thread(VmMonitor).start();
 
 	}

@@ -64,9 +64,6 @@ public class VmMonitor implements Runnable {
 			System.out.println(this.getRequestQueue().size());
 			// apply selected policy
 			switch (this.getPolicy()) {
-			case SuperSimple:
-				this.applySuperSimplePolicy();
-				break;
 			case Simple:
 				this.applySimplePolicy();
 				break;
@@ -98,19 +95,7 @@ public class VmMonitor implements Runnable {
 		}
 	}
 
-	public void applySuperSimplePolicy() {
-
-		this.popFromRequestQueue();
-		new Thread() {
-			public void run() {
-				// calls the openNebula to return a new VM
-				String vmIP = allocateVM(HeadNode.getOpenNebula());
-				System.out.println("VM successfully allocated with IP:" + vmIP);
-			}
-		}.start();
-
-		//this.logStatus("1");
-	}
+	
 
 	public void applyAdvancedPolicy() {
 

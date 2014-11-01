@@ -2,5 +2,5 @@ package constants;
 
 public enum Policy {
 
-	SuperSimple, Simple, Advanced
+	Simple, Advanced
 }

@@ -25,8 +25,8 @@ public class UserCreator {
 
 		UserCreator usercreator = new UserCreator();
 
-		//usercreator.createDistribution();
-		usercreator.createUsers(10);
+		usercreator.createDistribution();
+		//usercreator.createUsers(10);
 
 	}
 	
