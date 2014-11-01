@@ -34,6 +34,11 @@ public class UserCreator {
 		
 		for(int i=0; i<num; i++){
 			this.createUser(0);
+			try {
+				Thread.sleep(50000);
+			} catch (InterruptedException e) {
+				e.printStackTrace();
+			}
 		}
 	}
 
