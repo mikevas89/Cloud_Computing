@@ -13,11 +13,12 @@ public class VMStats {
 	private long firstPing;
 	private long timeOfAllocation;
 	private long timeToGetReady;
+	private long startTimeWithNoUsers;
 	
 
 	
 	public VMStats(int vmID, VirtualMachine vmInstance, String vmIP,
-			VMstatus vmStatus, int numRegisteredUsers, long timeOfAllocation) {
+			VMstatus vmStatus, int numRegisteredUsers, long timeOfAllocation ,long startTimeWithNoUsers) {
 		this.vmID = vmID;
 		this.vmInstance = vmInstance;
 		this.vmIP = vmIP;
@@ -25,10 +26,11 @@ public class VMStats {
 		this.setLastPingSent(0);
 		this.numRegisteredUsers = numRegisteredUsers;
 		this.timeOfAllocation = timeOfAllocation;
+		this.startTimeWithNoUsers = startTimeWithNoUsers;
 	}
 
 
-
+/*
 	public float capacity(){
 		return (float) this.getNumRegisteredUsers() / Constants.MAX_CLIENTS_TO_VM;
 	}
@@ -52,7 +54,7 @@ public class VMStats {
 	public boolean notfullCapacity(){
 		return this.capacity() <= Constants.VM_CAPACITY_FULL_THRESHOLD;
 	}
-	
+	*/
 
 	
 	
@@ -91,6 +93,9 @@ public class VMStats {
 	}
 	public synchronized boolean setNumRegisteredUsers(int numRegisteredUsers) {
 		this.numRegisteredUsers = numRegisteredUsers;
+		//start timer that VM has no users
+		if(this.numRegisteredUsers==0)
+			this.setStartTimeWithNoUsers(System.currentTimeMillis());
 		return true;
 	}
 
@@ -139,6 +144,18 @@ public class VMStats {
 
 	public void setTimeToGetReady(long timeToGetReady) {
 		this.timeToGetReady = timeToGetReady;
+	}
+
+
+
+	public long getStartTimeWithNoUsers() {
+		return startTimeWithNoUsers;
+	}
+
+
+
+	public void setStartTimeWithNoUsers(long startTimeWithNoUsers) {
+		this.startTimeWithNoUsers = startTimeWithNoUsers;
 	}
 
 	

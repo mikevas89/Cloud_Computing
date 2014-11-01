@@ -45,6 +45,7 @@ public class PingMonitor implements Runnable {
 					entry.getValue().setVmStatus(VMstatus.Running);
 					entry.getValue().setFirstPing(entry.getValue().getLastPingSent());
 					entry.getValue().setTimeToGetReady(entry.getValue().getFirstPing() - entry.getValue().getTimeOfAllocation());
+					entry.getValue().setStartTimeWithNoUsers(System.currentTimeMillis());
 					System.out.println("PING MONITOR SET TO RUNNING:"+entry.getKey());
 					this.logVMPool();
 				}

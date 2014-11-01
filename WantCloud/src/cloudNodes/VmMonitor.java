@@ -11,6 +11,7 @@ import java.io.PrintWriter;
 import java.rmi.NotBoundException;
 import java.rmi.RemoteException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.Map.Entry;
 import java.util.concurrent.ConcurrentHashMap;
@@ -21,6 +22,7 @@ import org.opennebula.client.OneResponse;
 import org.opennebula.client.vm.VirtualMachine;
 
 import constants.Constants;
+import constants.Pair;
 import constants.Policy;
 import constants.RegisteredUser;
 import constants.RequestType;
@@ -167,7 +169,7 @@ public class VmMonitor implements Runnable {
 				.iterator(); it.hasNext();) {
 			VMStats vm = it.next().getValue();
 			if (vm.getVmStatus() == VMstatus.Running
-					&& vm.hasNormalCapacityAddingOneUser())
+					&& vm.getNumRegisteredUsers() < Constants.MAX_CLIENTS_TO_VM)
 				return true;
 		}
 		return false;
@@ -179,7 +181,7 @@ public class VmMonitor implements Runnable {
 			Entry<String, VMStats> entry = it.next();
 			VMStats vm = entry.getValue();
 			if (vm.getVmStatus() == VMstatus.Running
-					&& vm.hasNormalCapacityAddingOneUser())
+					&& vm.getNumRegisteredUsers() < Constants.MAX_CLIENTS_TO_VM)
 				return entry.getKey();
 		}
 		return null;
@@ -191,7 +193,6 @@ public class VmMonitor implements Runnable {
 			this.assignVMToUser(this.getAvailableVMForPUser(),
 					this.getPriorityRequest());
 		}
-
 	}
 
 	public boolean pUserExists() {
@@ -220,7 +221,7 @@ public class VmMonitor implements Runnable {
 		for (Iterator<Entry<String, VMStats>> it = this.getVmPool().entrySet()
 				.iterator(); it.hasNext();) {
 			VMStats vm = it.next().getValue();
-			if (vm.getVmStatus() == VMstatus.Running && vm.notfullCapacity())
+			if (vm.getVmStatus() == VMstatus.Running && (vm.getNumRegisteredUsers() < Constants.MAX_CLIENTS_TO_VM_UPPER_THRESHOLD) )
 				return true;
 		}
 		return false;
@@ -230,7 +231,7 @@ public class VmMonitor implements Runnable {
 		for (Iterator<Entry<String, VMStats>> it = this.getVmPool().entrySet()
 				.iterator(); it.hasNext();) {
 			VMStats vm = it.next().getValue();
-			if (vm.getVmStatus() == VMstatus.Running && vm.notfullCapacity())
+			if (vm.getVmStatus() == VMstatus.Running && (vm.getNumRegisteredUsers() < Constants.MAX_CLIENTS_TO_VM_UPPER_THRESHOLD))
 				return vm.getVmIP();
 		}
 		return null;
@@ -239,11 +240,105 @@ public class VmMonitor implements Runnable {
 	public void scheduleVMAllocations() {
 		// TODO: check if booting VMs exist
 
-		// check size of request queue and decide if allocation will be done
-		// according to capacities
-		// avg of user arrival
-		// size of request queue
+		//current requests + predicted requests
+		int requestsForVMs = this.getRequestQueue().size() + this.getUserRequestRatio();
+		
+		int freeSlotsFromRunningVMs = freeSlotsFromRunningVMs();
+		
+		int restRequestsForVMs = requestsForVMs - freeSlotsFromRunningVMs;
+		
+		//there are available rooms for all requests
+		if(restRequestsForVMs<=0){
+			//only if the free extra slots are over the MAX_CLIENTS_TO_VM, check to delete idle VMs
+			if(freeSlotsFromRunningVMs - requestsForVMs >=Constants.MAX_CLIENTS_TO_VM)
+				this.handleIdleVMs();
+			return ;
+		}
+		//latencies of future available rooms
+		ArrayList<Long> latencies = new ArrayList<Long>();
+		
+		//available rooms if booting Vms exist
+		for (Iterator<Entry<String, VMStats>> it = this.getVmPool().entrySet().iterator(); 
+				it.hasNext();) {
+			VMStats entry = it.next().getValue();
+			if (entry.getVmStatus() == VMstatus.Booting){
+				for(int i=0; i<Constants.MAX_CLIENTS_TO_VM;i++)
+					latencies.add(entry.getTimeOfAllocation() + this.getAvgBootingTime() - System.currentTimeMillis());
+			}
+		}
+		//there are available rooms for all requests
+		if(latencies.size() >= restRequestsForVMs)
+			return;
+		
+		//restRequests without rooms in booting VMs
+		int restRequestsWithoutBootingVMs = restRequestsForVMs - latencies.size();
+		
+		//calculate latencies from existing jobs
+		for (Iterator<Entry<String, ArrayList<RegisteredUser>>> it = this.getVmUsers().entrySet().iterator(); 
+				it.hasNext();) {
+			ArrayList<RegisteredUser> entry = it.next().getValue();
+			//expected latency for job completion
+			for(RegisteredUser user : entry)
+				latencies.add(user.getRegistrationTime() + this.headnode.getAvgCompletionTime() - System.currentTimeMillis());
+		}
+		
+		//sort latencies to find the #restRequestForVms minimum latencies
+		Collections.sort(latencies);
+		
+		//take restRequestsForVMs-th latency
+		long predictedLatency = latencies.get(restRequestsForVMs-1);
+		
+		//rooms will be available before a new VM boots
+		if(predictedLatency < this.getAvgBootingTime())
+			return;
+		
+		//allocate number of VMs according to restRequestsWithoutBootingVMs
+		for(int i=0; i < Math.floorDiv(restRequestsWithoutBootingVMs, Constants.MAX_CLIENTS_TO_VM);i++){
+			new Thread() {
+				public void run() {
+					// calls the openNebula to return a new VM
+					String vmIP = allocateVM(HeadNode.getOpenNebula());
+					System.out.println("VM successfully allocated with IP:"
+							+ vmIP);
+				}
+			}.start();
+		}
 	}
+	
+	//deletes idle VMs which do not handle user requests for a specific period of time (10% of booting time) 
+	public void handleIdleVMs(){
+		
+		String vmIP = this.getIdleVM();
+		if(vmIP == null)
+			return;
+		
+		//in case of an idle VM
+		this.closeVM(vmIP);
+		//delete all the entries of the VM
+		this.getVmPool().remove(vmIP);
+		this.getVmUsers().remove(vmIP);
+		
+		System.out.println("-----IDLE VM " +vmIP + "will be deleted!!-----");
+	}
+	
+	//returns vmIP of an idle VM according to 10% of booting time of VM
+	public String getIdleVM(){
+		
+		for (Iterator<Entry<String, VMStats>> it = this.getVmPool().entrySet().iterator(); 
+				it.hasNext();) {
+			VMStats entry = it.next().getValue();
+			
+			if(     (entry.getVmStatus() == VMstatus.Running) 
+					&& (entry.getNumRegisteredUsers()==0)
+					&& (entry.getStartTimeWithNoUsers()!=0)
+					&& (System.currentTimeMillis() - entry.getStartTimeWithNoUsers()) > (long)(0.1 * this.getAvgBootingTime()))
+						return entry.getVmIP();			
+		}
+		
+		return null;
+		
+	}
+	
 
 	/*---------------------------------------------------
 	 *			 COMMON POLICY METHODS
@@ -259,13 +354,26 @@ public class VmMonitor implements Runnable {
 
 		// add user to registered users
 		ArrayList<RegisteredUser> group = this.getVmUsers().get(vmIP);
-		group.add(new RegisteredUser(request.getSenderID(), vmIP));
+		group.add(new RegisteredUser(request.getSenderID(), vmIP, System.currentTimeMillis()));
 
 		// update users using the VM
 		VMStats availableVM = this.getVmPool().get(vmIP);
-		availableVM
-				.setNumRegisteredUsers(availableVM.getNumRegisteredUsers() + 1);
-
+		availableVM.setNumRegisteredUsers(availableVM.getNumRegisteredUsers() + 1);
+		availableVM.setStartTimeWithNoUsers(0); //initialization if VM had no users before
+		
+		//delete user form waiting queue
+		//put user's waiting time to stats
+		
+		for (Iterator<Pair<Integer, Long>> it = (this.headnode.getWaitingUsers()).iterator(); it.hasNext();) {
+			Pair<Integer, Long> entry = it.next();
+			if(entry.getLeft() == request.getSenderID()){
+				this.headnode.getWaitingUsersStats().add(
+						new Pair<Long,Long>(System.currentTimeMillis(), System.currentTimeMillis() - entry.getRight()));
+				it.remove();
+				break;
+			}
+		}
+		
 		System.out.println("Available IP found: Sending to user "
 				+ request.getSenderID());
 
@@ -336,12 +444,9 @@ public class VmMonitor implements Runnable {
 
 			// ------------------------------------------------------------------
 			// Vm is up and running with ssh deamon up and running
-
 			// put VM to VM pool
-			this.getVmPool().put(
-					vmIP,
-					new VMStats(newVMID, vm, vmIP, VMstatus.Booting, 0,
-							timeOfAllocation));
+			this.getVmPool().put(vmIP,new VMStats(newVMID, vm, 
+							vmIP, VMstatus.Booting, 0,timeOfAllocation,0));
 
 			// make entry to vmUsers container
 			this.getVmUsers().put(vmIP, new ArrayList<RegisteredUser>());
@@ -355,6 +460,14 @@ public class VmMonitor implements Runnable {
 
 		return vmIP;
 	}
+	
+	
+	public void closeVM(String vmIP){
+		//delete VM from OpenNebulaEntries
+		this.headnode.getVmPool().get(vmIP).getVmInstance().delete();
+	}
+	
+	
 
 	public String deserializeString(File file) throws IOException {
 		int len;
@@ -421,7 +534,6 @@ public class VmMonitor implements Runnable {
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
-
 	}
 
 	
@@ -441,6 +553,21 @@ public class VmMonitor implements Runnable {
 	public int getUserRequestRatio(){
 		return (int) Math.ceil((double) this.headnode.getSumRequestRatio()/ this.headnode.getNumAvgRequestForRatio());
 	}
+
+	
+	public int freeSlotsFromRunningVMs(){
+	
+		int freeSlots=0;
+		//count free slots from running VMs
+		for (Iterator<Entry<String, VMStats>> it = this.getVmPool().entrySet().iterator();
+				it.hasNext();) {
+			VMStats entry = it.next().getValue();
+			if(entry.getVmStatus() == VMstatus.Running && entry.getNumRegisteredUsers() < Constants.MAX_CLIENTS_TO_VM)
+				freeSlots+= Constants.MAX_CLIENTS_TO_VM - entry.getNumRegisteredUsers();
+		}
+		return freeSlots;
+	}
+	
 	
 
 	/*---------------------------------------------------

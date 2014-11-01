@@ -22,7 +22,9 @@ public class Constants {
 	public static final int EXPONENTIAL_SEED = 123456;
 	
 	public static final int MAX_CLIENTS_TO_VM = 5;
-	public static final float VM_CAPACITY_NORMAL_THRESHOLD = (float) 0.7;
-	public static final float VM_CAPACITY_FULL_THRESHOLD = (float) 0.95;
+	public static final int MAX_CLIENTS_TO_VM_UPPER_THRESHOLD = 7;
+	
+//	public static final float VM_CAPACITY_NORMAL_THRESHOLD = (float) 0.7;
+//	public static final float VM_CAPACITY_FULL_THRESHOLD = (float) 0.95;
 	
 }

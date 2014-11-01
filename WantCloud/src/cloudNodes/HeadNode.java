@@ -19,6 +19,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 
 import communication.ServerRMI;
 import constants.Constants;
+import constants.Pair;
 import constants.Policy;
 import constants.RegisteredUser;
 import constants.VMStats;
@@ -37,6 +38,10 @@ public class HeadNode {
 	private ConcurrentHashMap<String, VMStats> vmPool; // statistics of VM
 
 	private CopyOnWriteArrayList<RequestMessage> requestQueue;
+	
+	private CopyOnWriteArrayList<Pair<Integer,Long>> waitingUsers;
+	private CopyOnWriteArrayList<Pair<Long,Long>> waitingUsersStats;
+	
 
 	//job completion time stats
 	private int completedJobs;
@@ -75,6 +80,8 @@ public class HeadNode {
 		vmUsers = new ConcurrentHashMap<String, ArrayList<RegisteredUser>>();
 		vmPool = new ConcurrentHashMap<String, VMStats>();
 		requestQueue = new CopyOnWriteArrayList<RequestMessage>();
+		waitingUsers = new CopyOnWriteArrayList<Pair<Integer, Long>>();
+		waitingUsersStats = new CopyOnWriteArrayList<Pair<Long, Long>>();
 		// logger = new Vector<String>();
 
 		// create openNebula client
@@ -134,7 +141,7 @@ public class HeadNode {
 			case DeleteUser:
 				// deletes the registered user from the VM IP that user sent
 				this.deleteUser(new RegisteredUser(request.getSenderID(),
-						request.getVmIP()));
+						request.getVmIP(),0));
 				this.updateAvgJobCompletion(request.getExecutionJobTime());
 				break;
 			default:
@@ -208,6 +215,8 @@ public class HeadNode {
 	public boolean putRequestToQueue(RequestMessage request) {
 		try {
 			this.requests.put(request);
+			//put to waitingUsers list
+			this.getWaitingUsers().add(new Pair<Integer, Long>(request.getSenderID(),System.currentTimeMillis()));
 			return true;
 		} catch (InterruptedException e) {
 			e.printStackTrace();
@@ -378,8 +387,8 @@ public class HeadNode {
 		return completedJobs;
 	}
 
-	public double getAvgCompletionTime() {
-		return avgCompletionTime;
+	public long getAvgCompletionTime() {
+		return Math.round(avgCompletionTime);
 	}
 
 	public void setCompletedJobs(int completedJobs) {
@@ -423,6 +432,24 @@ public class HeadNode {
 
 	public void setNumAvgRequestForRatio(int numAvgRequestForRatio) {
 		this.numAvgRequestForRatio = numAvgRequestForRatio;
+	}
+
+	public CopyOnWriteArrayList<Pair<Integer, Long>> getWaitingUsers() {
+		return waitingUsers;
+	}
+
+	public CopyOnWriteArrayList<Pair<Long, Long>> getWaitingUsersStats() {
+		return waitingUsersStats;
+	}
+
+	public void setWaitingUsers(
+			CopyOnWriteArrayList<Pair<Integer, Long>> waitingUsers) {
+		this.waitingUsers = waitingUsers;
+	}
+
+	public void setWaitingUsersStats(
+			CopyOnWriteArrayList<Pair<Long, Long>> waitingUsersStats) {
+		this.waitingUsersStats = waitingUsersStats;
 	}
 
 }

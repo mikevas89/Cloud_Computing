@@ -3,16 +3,16 @@ package constants;
 public class RegisteredUser {
 	
 	private int id;
-	private String vmIPofUser;
+	private String vmIPofUser; //IP of VM user is assigned
+	private long registrationTime; //time user assigned to VM
 	
-	@Override
-	public String toString() {
-		return "RegisteredUser [id=" + id + ", vmIPofUser=" + vmIPofUser + "]";
-	}
+	
 
-	public RegisteredUser(int id,String vmIPofUser){
+	public RegisteredUser(int id,String vmIPofUser, long registrationTime){
 		this.id = id;
 		this.vmIPofUser= vmIPofUser;		
+		this.registrationTime = registrationTime;
+		
 	}
 
 	public int getId() {
@@ -30,7 +30,22 @@ public class RegisteredUser {
 	public void setVmIPofUser(String vmIPofUser) {
 		this.vmIPofUser = vmIPofUser;
 	}
+	
+	public long getRegistrationTime() {
+		return registrationTime;
+	}
 
+	public void setRegistrationTime(long registrationTime) {
+		this.registrationTime = registrationTime;
+	}
+
+	
+	@Override
+	public String toString() {
+		return "RegisteredUser [id=" + id + ", vmIPofUser=" + vmIPofUser + "]";
+	}
+
+	
 	@Override
 	public int hashCode() {
 		final int prime = 31;
@@ -59,5 +74,7 @@ public class RegisteredUser {
 			return false;
 		return true;
 	}
+
+
 
 }
