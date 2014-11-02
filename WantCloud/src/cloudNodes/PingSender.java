@@ -37,22 +37,26 @@ public class PingSender {
 				
 				serverCommunication = this.getServerReg();
 				if(serverCommunication != null){
-					System.out.println("I am sending ping");
+					System.out.println("I am sending ping @ "+ System.currentTimeMillis());
 					serverCommunication.onMessageReceived(
 							new PingMessage(-2, vmIP, Constants.HEADNODE_ID,
 									this.headNodeIP));
 				}
 						
 			} catch (RemoteException e) {
-				e.printStackTrace();
+				//e.printStackTrace();
+				System.err.println("Run:"+"Server: " + Constants.HEADNODE_NAME
+						+ " ServerRMI RemoteException error");
 			} catch (NotBoundException e) {
-				e.printStackTrace();
-			}
+				System.err.println("Run:"+"Server: " + Constants.HEADNODE_NAME
+						+ " ServerRMI NotBoundException error");			}
 			
 			try {
 				Thread.sleep(Constants.PING_PERIOD);
 			} catch (InterruptedException e) {
-				e.printStackTrace();
+				//e.printStackTrace();
+				System.err.println("Run:"+"Server: " + Constants.HEADNODE_NAME
+						+ " ServerRMI InterruptedException error");
 			}
 
 		}
@@ -71,14 +75,16 @@ public class PingSender {
 					+ Constants.HEADNODE_NAME);
 		} catch (MalformedURLException e) {
 			// e.printStackTrace();
+			System.err.println("getServerReg:"+"Server: " + Constants.HEADNODE_NAME
+					+ " ServerRMI MalformedURLException error");
 		} catch (RemoteException e) {
 			// e.printStackTrace();
-			System.err.println("Server: " + Constants.HEADNODE_NAME
+			System.err.println("getServerReg:"+"Server: " + Constants.HEADNODE_NAME
 					+ " ServerRMI RemoteException error");
 			return null;
 		} catch (NotBoundException e) {
 			// e.printStackTrace();
-			System.err.println("Server: " + Constants.HEADNODE_NAME
+			System.err.println("getServerReg:"+"Server: " + Constants.HEADNODE_NAME
 					+ " ServerRMI NotBoundException error");
 			return null;
 		}

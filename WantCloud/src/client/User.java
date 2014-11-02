@@ -99,6 +99,8 @@ public class User implements Runnable {
 
 			executionTime = System.currentTimeMillis() - this.executionTime;
 			
+			System.out.println("User "+ this.getId() + ": execTime="+ executionTime);
+			
 			conn.close();
 		}
 		 //ask headnode to remove User 
@@ -167,21 +169,19 @@ public class User implements Runnable {
 
 			br = new BufferedReader(new InputStreamReader(stdout));
 
-			while (true) {
-				line = br.readLine();
-				if (line == null)
-					break;
-				else
-					System.out.println("User: " + this.getId() + " " + line);					
-			}
-
+			line = br.readLine();
+			System.out.println("User: " + this.getId() + " " + line);
+			
 			sess.close();
 
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
 		
-		return line.equals("Finished");
+		if(line==null)
+			return false;
+		else
+			return line.equals("Finished");
 
 	}
 
@@ -192,12 +192,12 @@ public class User implements Runnable {
 	 ----------------------------------------------------
 	 */
 	public boolean bindInExistingRegistry(String idName, ClientRMI comm) {
-		System.out.println("bindInExistingRegistry");
+		//System.out.println("bindInExistingRegistry");
 		Registry myRegistry;
 		try {
 			myRegistry = LocateRegistry.getRegistry(Constants.CLIENT_RMI);
 			myRegistry.bind(idName, comm); // bind with their names
-			System.out.println("bindInExistingRegistry completed");
+			//System.out.println("bindInExistingRegistry completed");
 			return true;
 		} catch (RemoteException e) {
 			e.printStackTrace();
@@ -209,15 +209,15 @@ public class User implements Runnable {
 	}
 
 	public boolean createRegistryAndBind(String idName, ClientRMI comm) {
-		System.out.println("createRegistryAndBind");
+		//System.out.println("createRegistryAndBind");
 		Registry myRegistry;
 		try {
 			myRegistry = LocateRegistry.createRegistry(Constants.CLIENT_RMI);
 			myRegistry.rebind(idName, comm); // server's name
-			System.out.println("createRegistryAndBind completed");
+			//System.out.println("createRegistryAndBind completed");
 			return true;
 		} catch (RemoteException e) {
-			System.out.println("createRegistryAndBind failed");
+			//System.out.println("createRegistryAndBind failed");
 			// e.printStackTrace();
 			return false;
 		}

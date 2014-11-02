@@ -10,15 +10,15 @@ public class Constants {
 	public static final String HEADNODE_NAME= "WantCloud";
 	public static final int HEADNODE_ID= -1;
 	
-	public static final long PING_PERIOD = 3000;
+	public static final long PING_PERIOD = 6000;
 	//public static final long USER_REQUEST_PERIOD = 3000;
 	
 	
-	public static final long PING_MONITOR_CHECKING_PERIOD =PING_PERIOD /5;
-	public static final long PING_TIMEOUT =PING_PERIOD *8;
+	public static final long PING_MONITOR_CHECKING_PERIOD =PING_PERIOD/2;
+	public static final long PING_TIMEOUT =PING_PERIOD *2000;
 	public static final long VM_MONITOR_PERIOD = 5000;
 	
-	public static final int EXPONENTIAL_MEAN = 5;
+	public static final int EXPONENTIAL_MEAN = 25;
 	public static final int EXPONENTIAL_SEED = 123456;
 	
 	public static final int MAX_CLIENTS_TO_VM = 5;

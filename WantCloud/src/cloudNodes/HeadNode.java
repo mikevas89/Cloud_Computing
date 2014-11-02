@@ -2,7 +2,6 @@ package cloudNodes;
 
 import interfaces.ServerClientRMI;
 
-
 import java.io.File;
 import java.net.MalformedURLException;
 import java.rmi.AlreadyBoundException;
@@ -53,6 +52,9 @@ public class HeadNode {
 	private int numAvgRequestForRatio;
 	private int numWindowRequestsForRatio;
 	private long windowTimeForRatio;
+	
+	private long sumBootingTimes;
+	private long numBootingTimes;
 	
 	
 	// Logger
@@ -106,14 +108,13 @@ public class HeadNode {
 		 Create thread for monitoring the pings from the VMs
 		 ----------------------------------------------------
 		 */
-		Runnable pingMonitor = new PingMonitor(this.getVmPool(),
-				this.getVmUsers());
+		Runnable pingMonitor = new PingMonitor(this);
 		new Thread(pingMonitor).start();
 		/*----------------------------------------------------
 		 Create thread for monitoring the VMs
 		 ----------------------------------------------------
 		 */
-		Runnable VmMonitor = new VmMonitor(this, Policy.Simple);
+		Runnable VmMonitor = new VmMonitor(this, Policy.Advanced);
 		new Thread(VmMonitor).start();
 
 	}
@@ -390,7 +391,10 @@ public class HeadNode {
 	}
 
 	public long getAvgCompletionTime() {
-		return Math.round(avgCompletionTime);
+		if(this.avgCompletionTime == 0)
+			return this.getAvgBootingTime();
+		else
+			return Math.round(avgCompletionTime);
 	}
 
 	public void setCompletedJobs(int completedJobs) {
@@ -415,6 +419,10 @@ public class HeadNode {
 
 	public long getWindowTimeForRatio() {
 		return windowTimeForRatio;
+	}
+	
+	public void addToSumBootingTimes(long bootingTime){
+		this.sumBootingTimes += bootingTime; 
 	}
 
 	public void setSumRequestRatio(int avgRequestRatio) {
@@ -453,5 +461,28 @@ public class HeadNode {
 			CopyOnWriteArrayList<Pair<Long, Long>> waitingUsersStats) {
 		this.waitingUsersStats = waitingUsersStats;
 	}
+
+	public long getSumBootingTimes() {
+		return sumBootingTimes;
+	}
+
+	public void setSumBootingTimes(long sumBootingTimes) {
+		this.sumBootingTimes = sumBootingTimes;
+	}
+
+	public long getNumBootingTimes() {
+		return numBootingTimes;
+	}
+
+	public void setNumBootingTimes(long numBootingTimes) {
+		this.numBootingTimes = numBootingTimes;
+	}
+	
+	public long getAvgBootingTime() {
+
+		return Math.round((double) this.getSumBootingTimes()
+				/ this.getNumBootingTimes());
+	}
+	
 
 }

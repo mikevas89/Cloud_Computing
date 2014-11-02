@@ -40,12 +40,14 @@ public class RegisteredUser {
 	}
 
 	
-	@Override
-	public String toString() {
-		return "RegisteredUser [id=" + id + ", vmIPofUser=" + vmIPofUser + "]";
-	}
 
 	
+	@Override
+	public String toString() {
+		return "RegisteredUser [id=" + id + ", vmIPofUser=" + vmIPofUser
+				+ ", registrationTime=" + registrationTime + "]";
+	}
+
 	@Override
 	public int hashCode() {
 		final int prime = 31;

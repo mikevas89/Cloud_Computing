@@ -69,7 +69,11 @@ public class UserCreator {
 	public void createUsersForMinute(long num){
 		
 		long numUsers = num;
-		long timeToSleepPerUser = Math.round((60* 1000 / numUsers));
+		long timeToSleepPerUser;
+		if(numUsers==0)
+			timeToSleepPerUser = Math.round((60* 1000 ));
+		else
+			timeToSleepPerUser = Math.round((60* 1000 / numUsers));
 		
 		System.out.println("Create "+ numUsers + " users for this minute");
 		

@@ -38,6 +38,8 @@ public class VmMonitor implements Runnable {
 	private ConcurrentHashMap<String, ArrayList<RegisteredUser>> vmUsers; // registered clients
 	private HeadNode headnode;
 	private Policy policy;
+	
+	
 
 	// POLICY is assigned by HeadNode
 	public VmMonitor(HeadNode headnode, Policy policy) {
@@ -45,6 +47,7 @@ public class VmMonitor implements Runnable {
 		this.setVmPool(headnode.getVmPool());
 		this.setVmUsers(headnode.getVmUsers());
 		this.setPolicy(policy);
+		this.headnode = headnode;
 	}
 
 	@Override
@@ -57,24 +60,23 @@ public class VmMonitor implements Runnable {
 			} catch (InterruptedException e) {
 				e.printStackTrace();
 			}
-			
+			System.out.println("--->Run : average Booting time :" +  this.headnode.getAvgBootingTime() );
 			//check window time of userRequests ratio to update it
 			//window Time for calculating user requests is at least the booting time of VMs
 			//start update the ratio when first VM is running 
-			if(System.currentTimeMillis() - this.headnode.getWindowTimeForRatio() > this.getAvgBootingTime() && this.availableVM()){
+			if(System.currentTimeMillis() - this.headnode.getWindowTimeForRatio() > this.headnode.getAvgBootingTime() && this.availableVM()){
 				this.headnode.addToSumRequestRatio(this.headnode.getNumWindowRequestsForRatio());
 				this.headnode.setNumAvgRequestForRatio(this.headnode.getNumAvgRequestForRatio()+1);
 				
 				this.headnode.setNumWindowRequestsForRatio(0);
 				this.headnode.setWindowTimeForRatio(System.currentTimeMillis());
 				
+				System.out.println("--->Run : average Booting time :" +  this.headnode.getAvgBootingTime() );
 				System.out.println("--->Run : Update to request ratio, new AvgRequestRatio :" +  this.getUserRequestRatio() );
 				System.out.println("--->Run : Print the waitingStats here because it is rare :" +  this.headnode.getWaitingUsersStats().toString() );
 			}
 			
 
-			if (this.getRequestQueue().size() <= 0)
-				continue;
 			// apply selected policy
 			switch (this.getPolicy()) {
 			case Simple:
@@ -90,24 +92,29 @@ public class VmMonitor implements Runnable {
 
 	public void applySimplePolicy() {
 
-		//handle the priority users if any
+		// handle the priority users if any
 		this.handlePUsers();
 
-		if (this.availableVM()) {
-			String availableVMIP = getAvailableVM();
-			this.assignVMToUser(availableVMIP, this.popFromRequestQueue());
-		} else if (!this.bootingVM()) {
-			System.out.println("applySimplePolicy: bootingVM NOT exists" + this.bootingVM());
+		System.out.println("applySimplePolicy: "+ this.getRequestQueue().size()+ " regular requests have to be handled");
+
+		while (!this.getRequestQueue().isEmpty() && this.availableVM()) {
+			this.assignVMToUser(this.getAvailableVM(),
+					this.popFromRequestQueue());
+		}
+
+		if (!this.getRequestQueue().isEmpty() && !this.bootingVM()) {
+			System.out.println("applySimplePolicy: bootingVM NOT exists "
+					+ this.bootingVM());
 			new Thread() {
 				public void run() {
 					// calls the openNebula to return a new VM
 					String vmIP = allocateVM(HeadNode.getOpenNebula());
 					System.out.println("applySimplePolicy : VM successfully allocated with IP:"
-							+ vmIP);
+									+ vmIP);
 				}
 			}.start();
 		}
-		//check if idle VMs should be removed
+		// check if idle VMs should be removed
 		this.handleIdleVMs();
 	}
 
@@ -137,7 +144,8 @@ public class VmMonitor implements Runnable {
 		for (Iterator<Entry<String, VMStats>> it = this.getVmPool().entrySet()
 				.iterator(); it.hasNext();) {
 			Entry<String, VMStats> entry = it.next();
-			if (entry.getValue().getVmStatus() == VMstatus.Running)
+			if (entry.getValue().getVmStatus() == VMstatus.Running	
+					&& entry.getValue().getNumRegisteredUsers() < Constants.MAX_CLIENTS_TO_VM)
 				return true;
 		}
 
@@ -160,7 +168,8 @@ public class VmMonitor implements Runnable {
 		for (Iterator<Entry<String, VMStats>> it = this.getVmPool().entrySet()
 				.iterator(); it.hasNext();) {
 			Entry<String, VMStats> entry = it.next();
-			if (entry.getValue().getVmStatus() == VMstatus.Running)
+			if (entry.getValue().getVmStatus() == VMstatus.Running
+					&& entry.getValue().getNumRegisteredUsers() < Constants.MAX_CLIENTS_TO_VM)
 				return entry.getKey();
 		}
 		return null;
@@ -246,7 +255,7 @@ public class VmMonitor implements Runnable {
 			VMStats entry = it.next().getValue();
 			if (entry.getVmStatus() == VMstatus.Booting){
 				for(int i=0; i<Constants.MAX_CLIENTS_TO_VM;i++)
-					latencies.add(entry.getTimeOfAllocation() + this.getAvgBootingTime() - System.currentTimeMillis());
+					latencies.add(entry.getTimeOfAllocation() + this.headnode.getAvgBootingTime() - System.currentTimeMillis());
 			}
 		}
 		
@@ -261,25 +270,43 @@ public class VmMonitor implements Runnable {
 		System.out.println("scheduleVMAllocations: Have to find "+ restRequestsWithoutBootingVMs + " rooms from expected finished time of jobs");
 		
 		//calculate latencies from existing jobs
-		for (Iterator<Entry<String, ArrayList<RegisteredUser>>> it = this.getVmUsers().entrySet().iterator(); 
+		for (Iterator<Entry<String, VMStats>> it = this.getVmPool().entrySet().iterator(); 
 				it.hasNext();) {
-			ArrayList<RegisteredUser> entry = it.next().getValue();
-			//expected latency for job completion
-			for(RegisteredUser user : entry)
-				latencies.add(user.getRegistrationTime() + this.headnode.getAvgCompletionTime() - System.currentTimeMillis());
+			VMStats entry = it.next().getValue();
+			if (entry.getVmStatus() == VMstatus.Running){
+				//add registered users from running VMs 
+				if(entry.getNumRegisteredUsers() > 0){
+					ArrayList<RegisteredUser> users = this.getVmUsers().get(entry.getVmIP());
+					for(RegisteredUser user: users)
+						latencies.add(user.getRegistrationTime() + this.headnode.getAvgCompletionTime() - System.currentTimeMillis());
+				}
+				//add free rooms from running VMs with latency=0
+				for(int i=0; i<Constants.MAX_CLIENTS_TO_VM - entry.getNumRegisteredUsers();i++)
+					latencies.add((long) 0);
+			}
 		}
 		
-		//sort latencies to find the #restRequestForVms minimum latencies
-		Collections.sort(latencies);
+		System.out.println("scheduleVMAllocations Latencies:"+latencies.toString());
 		
-		//take restRequestsForVMs-th latency
-		long predictedLatency = latencies.get(restRequestsForVMs-1);
+		System.out
+				.println("scheduleVMAllocations: After counting rooms from expected finished time, free rooms : "
+						+ latencies.size());
+		
+		long predictedLatency;
+		if (latencies.isEmpty() || restRequestsForVMs > latencies.size())
+			predictedLatency = this.headnode.getAvgBootingTime();
+		else {
+			// sort latencies to find the #restRequestForVms minimum latencies
+			Collections.sort(latencies);
+			// take restRequestsForVMs-th latency
+			predictedLatency = latencies.get(restRequestsForVMs - 1);
+		}
 		
 		System.out.println("scheduleVMAllocations: After counting rooms from expected finished execution times, predicted latency : "+ predictedLatency
-							+ " and avg booting time : "+ this.getAvgBootingTime());
+							+ " and avg booting time : "+ this.headnode.getAvgBootingTime());
 		
 		//rooms will be available before a new VM boots
-		if(predictedLatency < this.getAvgBootingTime())
+		if(predictedLatency < this.headnode.getAvgBootingTime())
 			return;
 		
 		System.out.println("scheduleVMAllocations : New VMS have to be opened, num =: "
@@ -382,15 +409,20 @@ public class VmMonitor implements Runnable {
 	}
 
 	public RequestMessage getPriorityRequest() {
-		RequestMessage returnedRequest;
+		RequestMessage returnedRequest = null;
+		RequestMessage toRemove = null;
 		for (Iterator<RequestMessage> it = this.getRequestQueue().iterator(); it
 				.hasNext();) {
 			RequestMessage request = it.next();
 			if (request.getRequestType() == RequestType.PriorityRequest) {
+				toRemove = request;
 				returnedRequest = new RequestMessage(request);
-				it.remove();
-				return returnedRequest;
 			}
+		}
+		
+		if(toRemove!=null){
+			this.getRequestQueue().remove(toRemove);
+			return returnedRequest;
 		}
 		return null;
 	}
@@ -427,7 +459,7 @@ public class VmMonitor implements Runnable {
 				if(     (entry.getVmStatus() == VMstatus.Running) 
 						&& (entry.getNumRegisteredUsers()==0)
 						&& (entry.getStartTimeWithNoUsers()!=0)
-						&& (System.currentTimeMillis() - entry.getStartTimeWithNoUsers()) > (long)(0.1 * this.getAvgBootingTime()))
+						&& (System.currentTimeMillis() - entry.getStartTimeWithNoUsers()) > (long)(0.1 * this.headnode.getAvgBootingTime()))
 							return entry.getVmIP();			
 			}
 			
@@ -438,7 +470,7 @@ public class VmMonitor implements Runnable {
 	
 	public void closeVM(String vmIP){
 		//delete VM from OpenNebulaEntries
-		this.headnode.getVmPool().get(vmIP).getVmInstance().delete();
+		this.headnode.getVmPool().get(vmIP).getVmInstance().shutdown();
 	}
 	
 	
@@ -464,16 +496,19 @@ public class VmMonitor implements Runnable {
 		
 		//delete user form waiting queue
 		//put user's waiting time to stats
-		
+		Pair<Integer, Long> toRemove = null;
 		for (Iterator<Pair<Integer, Long>> it = (this.headnode.getWaitingUsers()).iterator(); it.hasNext();) {
 			Pair<Integer, Long> entry = it.next();
 			if(entry.getLeft() == request.getSenderID()){
+				toRemove = new Pair<Integer, Long>(entry.getLeft(), entry.getRight());
 				this.headnode.getWaitingUsersStats().add(
 						new Pair<Long,Long>(System.currentTimeMillis(), System.currentTimeMillis() - entry.getRight()));
-				it.remove();
 				break;
 			}
 		}
+		
+		if(toRemove!=null)
+			this.headnode.getWaitingUsers().remove(toRemove);
 		
 		System.out.println("assignVMToUser : Available IP found: Sending to user "
 				+ request.getSenderID());
@@ -511,17 +546,6 @@ public class VmMonitor implements Runnable {
 	 ----------------------------------------------------
 	 */
 	
-	public long getAvgBootingTime(){
-		
-		long sumBootTimes=0;
-		
-		for (Iterator<Entry<String, VMStats>> it = this.getVmPool().entrySet().iterator();
-				it.hasNext();) {
-			VMStats entry = it.next().getValue();
-			sumBootTimes+= entry.getTimeToGetReady();		
-		}		
-		return Math.round((double)sumBootTimes /this.getVmPool().size()) ;
-	}
 	
 	
 	public int getUserRequestRatio(){
@@ -569,22 +593,22 @@ public class VmMonitor implements Runnable {
 		try (PrintWriter out = new PrintWriter(new BufferedWriter(
 				new FileWriter("logger.txt", true)))) {
 			// String logWorld = "----------"; // according to the needed output
-			System.out.println("Now printing VMpool");
+			//System.out.println("Now printing VMpool");
 			out.println("Now printing VMpool");
 
-			for (Iterator<Entry<String, VMStats>> it = this.getVmPool()
+		/*	for (Iterator<Entry<String, VMStats>> it = this.getVmPool()
 					.entrySet().iterator(); it.hasNext();) {
 				Entry<String, VMStats> entry = it.next();
 				System.out.println(entry.toString());
 				out.println(entry.toString());
-			}
-			/*
-			 * System.out.println("Now printing VMusers"); for
-			 * (Iterator<Entry<String, ArrayList<RegisteredUser>>> it = this
-			 * .getVmUsers().entrySet().iterator(); it.hasNext();) {
-			 * Entry<String, ArrayList<RegisteredUser>> entry = it.next();
-			 * System.out.println(entry.toString()); }
-			 */
+			}*/
+			
+			 System.out.println("logStatus: Now printing VMusers"); for
+			 (Iterator<Entry<String, ArrayList<RegisteredUser>>> it = this
+			 .getVmUsers().entrySet().iterator(); it.hasNext();) {
+			 Entry<String, ArrayList<RegisteredUser>> entry = it.next();
+			 System.out.println(entry.toString()); }
+			
 
 			// logger.add(logWorld);
 
@@ -641,5 +665,7 @@ public class VmMonitor implements Runnable {
 	public void setPolicy(Policy policy) {
 		this.policy = policy;
 	}
+
+	
 
 }

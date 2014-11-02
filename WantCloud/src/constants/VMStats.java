@@ -27,6 +27,8 @@ public class VMStats {
 		this.numRegisteredUsers = numRegisteredUsers;
 		this.timeOfAllocation = timeOfAllocation;
 		this.startTimeWithNoUsers = startTimeWithNoUsers;
+		this.timeToGetReady = 0;
+		this.firstPing = 0;
 	}
 
 
@@ -102,14 +104,14 @@ public class VMStats {
 	
 
 
-
 	@Override
 	public String toString() {
-		return "VMStats [vmID=" + vmID + ", firstPing=" + firstPing
-				+ ", timeOfAllocation=" + timeOfAllocation
-				+ ", timeToGetReady=" + timeToGetReady + "]";
+		return "VMStats [vmID=" + vmID + ", vmIP=" + vmIP + ", vmStatus="
+				+ vmStatus + ", lastPingSent=" + lastPingSent
+				+ ", numRegisteredUsers=" + numRegisteredUsers
+				+ ", timeToGetReady=" + timeToGetReady
+				+ ", startTimeWithNoUsers=" + startTimeWithNoUsers + "]";
 	}
-
 
 
 	public long getFirstPing() {
