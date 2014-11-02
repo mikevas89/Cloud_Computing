@@ -283,10 +283,10 @@ public class VmMonitor implements Runnable {
 			return;
 		
 		System.out.println("scheduleVMAllocations : New VMS have to be opened, num =: "
-				+ Math.floorDiv(restRequestsWithoutBootingVMs, Constants.MAX_CLIENTS_TO_VM));
+				+ (int)Math.ceil((double)restRequestsWithoutBootingVMs / Constants.MAX_CLIENTS_TO_VM));
 		
 		//allocate number of VMs according to restRequestsWithoutBootingVMs
-		for(int i=0; i < Math.floorDiv(restRequestsWithoutBootingVMs, Constants.MAX_CLIENTS_TO_VM);i++){
+		for(int i=0; i < (int)Math.ceil((double)restRequestsWithoutBootingVMs / Constants.MAX_CLIENTS_TO_VM);i++){
 			new Thread() {
 				public void run() {
 					// calls the openNebula to return a new VM
