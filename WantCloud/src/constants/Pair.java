@@ -26,5 +26,11 @@ public class Pair<L,R> {
 	public L getLeft(){
 		return this.l;
 	}
+
+
+	@Override
+	public String toString() {
+		return "Pair [l=" + l + ", r=" + r + "]";
+	}
 	
 }

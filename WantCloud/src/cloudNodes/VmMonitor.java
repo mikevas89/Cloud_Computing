@@ -50,7 +50,7 @@ public class VmMonitor implements Runnable {
 	@Override
 	public void run() {
 
-		// check requestqueue
+		// check requestQueue
 		while (true) {
 			try {
 				Thread.sleep(Constants.VM_MONITOR_PERIOD);
@@ -67,6 +67,9 @@ public class VmMonitor implements Runnable {
 				
 				this.headnode.setNumWindowRequestsForRatio(0);
 				this.headnode.setWindowTimeForRatio(System.currentTimeMillis());
+				
+				System.out.println("--->Run : Update to request ratio, new AvgRequestRatio :" +  this.getUserRequestRatio() );
+				System.out.println("--->Run : Print the waitingStats here because it is rare :" +  this.headnode.getWaitingUsersStats().toString() );
 			}
 			
 
@@ -87,34 +90,39 @@ public class VmMonitor implements Runnable {
 
 	public void applySimplePolicy() {
 
-		//this.logStatus("1");
+		//handle the priority users if any
+		this.handlePUsers();
 
 		if (this.availableVM()) {
 			String availableVMIP = getAvailableVM();
 			this.assignVMToUser(availableVMIP, this.popFromRequestQueue());
 		} else if (!this.bootingVM()) {
-			System.out.println("bootingVM NOT exists" + this.bootingVM());
+			System.out.println("applySimplePolicy: bootingVM NOT exists" + this.bootingVM());
 			new Thread() {
 				public void run() {
 					// calls the openNebula to return a new VM
 					String vmIP = allocateVM(HeadNode.getOpenNebula());
-					System.out.println("VM successfully allocated with IP:"
+					System.out.println("applySimplePolicy : VM successfully allocated with IP:"
 							+ vmIP);
 				}
 			}.start();
 		}
+		//check if idle VMs should be removed
+		this.handleIdleVMs();
 	}
 
 	
 
 	public void applyAdvancedPolicy() {
 
+		//handle the priority users if any
 		this.handlePUsers();
-
+		//check if new VMs have to be allocated
 		this.scheduleVMAllocations();
 
-		// handle regular Request
-		if (!this.getRequestQueue().isEmpty() && this.availableAdvancedVM())
+		System.out.println("applyAdvancedPolicy: "+ this.getRequestQueue().size()+ " regular requests have to be handled");
+		// handle all regular Requests than can be assigned to existing VMs 
+		while (!this.getRequestQueue().isEmpty() && this.availableAdvancedVM())
 			this.assignVMToUser(this.getAvailableAdvancedVM(),
 					this.popFromRequestQueue());
 	}
@@ -187,35 +195,7 @@ public class VmMonitor implements Runnable {
 		return null;
 	}
 
-	public void handlePUsers() {
-
-		while (this.pUserExists() && this.availableVMForPUser()) {
-			this.assignVMToUser(this.getAvailableVMForPUser(),
-					this.getPriorityRequest());
-		}
-	}
-
-	public boolean pUserExists() {
-		for (RequestMessage request : this.getRequestQueue()) {
-			if (request.getRequestType() == RequestType.PriorityRequest)
-				return true;
-		}
-		return false;
-	}
-
-	public RequestMessage getPriorityRequest() {
-		RequestMessage returnedRequest;
-		for (Iterator<RequestMessage> it = this.getRequestQueue().iterator(); it
-				.hasNext();) {
-			RequestMessage request = it.next();
-			if (request.getRequestType() == RequestType.PriorityRequest) {
-				returnedRequest = new RequestMessage(request);
-				it.remove();
-				return returnedRequest;
-			}
-		}
-		return null;
-	}
+	
 
 	public boolean availableVMForPUser() {
 		for (Iterator<Entry<String, VMStats>> it = this.getVmPool().entrySet()
@@ -247,6 +227,9 @@ public class VmMonitor implements Runnable {
 		
 		int restRequestsForVMs = requestsForVMs - freeSlotsFromRunningVMs;
 		
+		System.out.println("scheduleVMAllocations: requestsForVMs(all): "+ requestsForVMs 
+								+ " freeSlotsFromRunningVM: " + freeSlotsFromRunningVMs + " diff :" + restRequestsForVMs);
+		
 		//there are available rooms for all requests
 		if(restRequestsForVMs<=0){
 			//only if the free extra slots are over the MAX_CLIENTS_TO_VM, check to delete idle VMs
@@ -266,12 +249,16 @@ public class VmMonitor implements Runnable {
 					latencies.add(entry.getTimeOfAllocation() + this.getAvgBootingTime() - System.currentTimeMillis());
 			}
 		}
+		
+		System.out.println("scheduleVMAllocations: After counting rooms to booting Vms, free rooms : "+ latencies.size());
 		//there are available rooms for all requests
 		if(latencies.size() >= restRequestsForVMs)
 			return;
 		
-		//restRequests without rooms in booting VMs
+			//restRequests without rooms in booting VMs
 		int restRequestsWithoutBootingVMs = restRequestsForVMs - latencies.size();
+		
+		System.out.println("scheduleVMAllocations: Have to find "+ restRequestsWithoutBootingVMs + " rooms from expected finished time of jobs");
 		
 		//calculate latencies from existing jobs
 		for (Iterator<Entry<String, ArrayList<RegisteredUser>>> it = this.getVmUsers().entrySet().iterator(); 
@@ -288,9 +275,15 @@ public class VmMonitor implements Runnable {
 		//take restRequestsForVMs-th latency
 		long predictedLatency = latencies.get(restRequestsForVMs-1);
 		
+		System.out.println("scheduleVMAllocations: After counting rooms from expected finished execution times, predicted latency : "+ predictedLatency
+							+ " and avg booting time : "+ this.getAvgBootingTime());
+		
 		//rooms will be available before a new VM boots
 		if(predictedLatency < this.getAvgBootingTime())
 			return;
+		
+		System.out.println("scheduleVMAllocations : New VMS have to be opened, num =: "
+				+ Math.floorDiv(restRequestsWithoutBootingVMs, Constants.MAX_CLIENTS_TO_VM));
 		
 		//allocate number of VMs according to restRequestsWithoutBootingVMs
 		for(int i=0; i < Math.floorDiv(restRequestsWithoutBootingVMs, Constants.MAX_CLIENTS_TO_VM);i++){
@@ -298,58 +291,166 @@ public class VmMonitor implements Runnable {
 				public void run() {
 					// calls the openNebula to return a new VM
 					String vmIP = allocateVM(HeadNode.getOpenNebula());
-					System.out.println("VM successfully allocated with IP:"
-							+ vmIP);
+					System.out.println("scheduleVMAllocations: VM successfully allocated with IP:"+ vmIP);
 				}
 			}.start();
 		}
 	}
 	
-	//deletes idle VMs which do not handle user requests for a specific period of time (10% of booting time) 
-	public void handleIdleVMs(){
-		
-		String vmIP = this.getIdleVM();
-		if(vmIP == null)
-			return;
-		
-		//in case of an idle VM
-		this.closeVM(vmIP);
-		//delete all the entries of the VM
-		this.getVmPool().remove(vmIP);
-		this.getVmUsers().remove(vmIP);
-		
-		System.out.println("-----IDLE VM " +vmIP + "will be deleted!!-----");
-	}
 	
-	//returns vmIP of an idle VM according to 10% of booting time of VM
-	public String getIdleVM(){
-		
-		for (Iterator<Entry<String, VMStats>> it = this.getVmPool().entrySet().iterator(); 
-				it.hasNext();) {
-			VMStats entry = it.next().getValue();
-			
-			if(     (entry.getVmStatus() == VMstatus.Running) 
-					&& (entry.getNumRegisteredUsers()==0)
-					&& (entry.getStartTimeWithNoUsers()!=0)
-					&& (System.currentTimeMillis() - entry.getStartTimeWithNoUsers()) > (long)(0.1 * this.getAvgBootingTime()))
-						return entry.getVmIP();			
-		}
-		
-		return null;
-		
-	}
 	
 
 	/*---------------------------------------------------
-	 *			 COMMON POLICY METHODS
+	 *		COMMON POLICY METHODS - NEW VM ALLOCATION
 	 ----------------------------------------------------
 	 */
 
+	public String allocateVM(Client oneClient) {
+
+		OneResponse rc = null;
+		String vmIP = null;
+		try {
+			String vmTemplate = deserializeString(new File(
+					"/home/cld1467/OpenNebula/centos-smallnet.one"));
+
+			System.out.print("allocateVM: Trying to allocate the virtual machine... ");
+			rc = VirtualMachine.allocate(oneClient, vmTemplate);
+			if (rc.isError()) {
+				System.out.println("failed!");
+				throw new Exception(rc.getErrorMessage());
+			}
+			long timeOfAllocation = System.currentTimeMillis();
+			// new vmID from the new VM
+			int newVMID = Integer.parseInt(rc.getMessage());
+			System.out.println("ok, ID " + newVMID + ".");
+			// get VM instance
+			VirtualMachine vm = new VirtualMachine(newVMID, oneClient);
+			// And now we can request its information.
+			rc = vm.info();
+			if (rc.isError())
+				throw new Exception(rc.getErrorMessage());
+
+			// Get VMs ip using bash commands
+			Runtime run = Runtime.getRuntime();
+			Process proc = run.exec(new String[] {
+					"/bin/sh","-c","onevm show " + Integer.toString(newVMID)
+					+ " | grep IP | cut -d \"\\\"\" -f 2" });
+			proc.waitFor();
+			BufferedReader br = new BufferedReader(new InputStreamReader(
+					proc.getInputStream()));
+			while (br.ready()) {
+				vmIP = br.readLine();
+			}
+			System.out.println("allocateVM: The new VM " + vm.getName() + " has status: "
+					+ vm.status() + " and IP:" + vmIP);
+			// ------------------------------------------------------------------
+			// Vm is up and running with SSH deamon up and running
+			// put VM to VM pool
+			this.getVmPool().put(vmIP,new VMStats(newVMID, vm, 
+							vmIP, VMstatus.Booting, 0,timeOfAllocation,0));
+			// make entry to vmUsers container
+			this.getVmUsers().put(vmIP, new ArrayList<RegisteredUser>());
+			//System.out.println("Printing lists from allocate");
+			//this.logStatus("");
+		} catch (Exception e) {
+			System.out.println(e.getMessage());
+		}
+
+		return vmIP;
+	}
+	
+	/*---------------------------------------------------
+	 *	COMMON POLICY METHODS - PRIORITY USERS
+	 ----------------------------------------------------
+	 */
+	
+	public void handlePUsers() {
+
+		while (this.pUserExists() && this.availableVMForPUser()) {
+			System.out.println("handlePUsers: Handling one PUser");
+			this.assignVMToUser(this.getAvailableVMForPUser(),
+					this.getPriorityRequest());
+		}
+	}
+
+	public boolean pUserExists() {
+		for (RequestMessage request : this.getRequestQueue()) {
+			if (request.getRequestType() == RequestType.PriorityRequest)
+				return true;
+		}
+		return false;
+	}
+
+	public RequestMessage getPriorityRequest() {
+		RequestMessage returnedRequest;
+		for (Iterator<RequestMessage> it = this.getRequestQueue().iterator(); it
+				.hasNext();) {
+			RequestMessage request = it.next();
+			if (request.getRequestType() == RequestType.PriorityRequest) {
+				returnedRequest = new RequestMessage(request);
+				it.remove();
+				return returnedRequest;
+			}
+		}
+		return null;
+	}
+	
+	/*---------------------------------------------------
+	 *	COMMON POLICY METHODS - IDLE VMS TO CLOSE
+	 ----------------------------------------------------
+	 */
+	
+	//deletes idle VMs which do not handle user requests for a specific period of time (10% of booting time) 
+		public void handleIdleVMs(){
+			
+			String vmIP = this.getIdleVM();
+			if(vmIP == null)
+				return;
+			
+			System.out.println("handleIdleVMs : idleVm exists : "+ vmIP);
+			//in case of an idle VM
+			this.closeVM(vmIP);
+			//delete all the entries of the VM
+			this.getVmPool().remove(vmIP);
+			this.getVmUsers().remove(vmIP);
+			
+			System.out.println("-----IDLE VM " +vmIP + "will be deleted!!-----");
+		}
+		
+		//returns vmIP of an idle VM according to 10% of booting time of VM
+		public String getIdleVM(){
+			
+			for (Iterator<Entry<String, VMStats>> it = this.getVmPool().entrySet().iterator(); 
+					it.hasNext();) {
+				VMStats entry = it.next().getValue();
+				
+				if(     (entry.getVmStatus() == VMstatus.Running) 
+						&& (entry.getNumRegisteredUsers()==0)
+						&& (entry.getStartTimeWithNoUsers()!=0)
+						&& (System.currentTimeMillis() - entry.getStartTimeWithNoUsers()) > (long)(0.1 * this.getAvgBootingTime()))
+							return entry.getVmIP();			
+			}
+			
+			return null;
+			
+		}
+	
+	
+	public void closeVM(String vmIP){
+		//delete VM from OpenNebulaEntries
+		this.headnode.getVmPool().get(vmIP).getVmInstance().delete();
+	}
+	
+	
+	/*---------------------------------------------------
+	 *	COMMON POLICY METHODS - REGISTER/NOTIFY USER FOR VM IP
+	 ----------------------------------------------------
+	 */
+	
 	public void assignVMToUser(String vmIP, RequestMessage requestMessage) {
 
 		RequestMessage request = requestMessage;
-
-		System.out.println("Available IP found: First request is from user "
+		System.out.println("assignVMToUser: Available IP found: First request is from user "
 				+ request.getSenderID());
 
 		// add user to registered users
@@ -374,7 +475,7 @@ public class VmMonitor implements Runnable {
 			}
 		}
 		
-		System.out.println("Available IP found: Sending to user "
+		System.out.println("assignVMToUser : Available IP found: Sending to user "
 				+ request.getSenderID());
 
 		// send message to user with the available IP (spawns thread)
@@ -383,115 +484,14 @@ public class VmMonitor implements Runnable {
 						.getReceiverIP(), true, vmIP));
 	}
 
-	public RequestMessage popFromRequestQueue() {
-		RequestMessage request = this.getRequestQueue().get(0);
-
-		this.getRequestQueue().remove(0);
-		return request;
-
-	}
-
-	public String allocateVM(Client oneClient) {
-
-		OneResponse rc = null;
-		String vmIP = null;
-
-		try {
-
-			String vmTemplate = deserializeString(new File(
-					"/home/cld1467/OpenNebula/centos-smallnet.one"));
-
-			System.out.print("Trying to allocate the virtual machine... ");
-
-			rc = VirtualMachine.allocate(oneClient, vmTemplate);
-
-			if (rc.isError()) {
-				System.out.println("failed!");
-				throw new Exception(rc.getErrorMessage());
-			}
-
-			long timeOfAllocation = System.currentTimeMillis();
-
-			// new vmID from the new VM
-			int newVMID = Integer.parseInt(rc.getMessage());
-			System.out.println("ok, ID " + newVMID + ".");
-
-			// get VM instance
-			VirtualMachine vm = new VirtualMachine(newVMID, oneClient);
-
-			// And now we can request its information.
-			rc = vm.info();
-
-			if (rc.isError())
-				throw new Exception(rc.getErrorMessage());
-
-			// Get VMs ip using bash commands
-			Runtime run = Runtime.getRuntime();
-			Process proc = run.exec(new String[] {
-					"/bin/sh",
-					"-c",
-					"onevm show " + Integer.toString(newVMID)
-							+ " | grep IP | cut -d \"\\\"\" -f 2" });
-			proc.waitFor();
-			BufferedReader br = new BufferedReader(new InputStreamReader(
-					proc.getInputStream()));
-			while (br.ready()) {
-				vmIP = br.readLine();
-			}
-
-			System.out.println("The new VM " + vm.getName() + " has status: "
-					+ vm.status() + " and IP:" + vmIP);
-
-			// ------------------------------------------------------------------
-			// Vm is up and running with ssh deamon up and running
-			// put VM to VM pool
-			this.getVmPool().put(vmIP,new VMStats(newVMID, vm, 
-							vmIP, VMstatus.Booting, 0,timeOfAllocation,0));
-
-			// make entry to vmUsers container
-			this.getVmUsers().put(vmIP, new ArrayList<RegisteredUser>());
-
-			System.out.println("Printing lists from allocate");
-			//this.logStatus("");
-
-		} catch (Exception e) {
-			System.out.println(e.getMessage());
-		}
-
-		return vmIP;
-	}
 	
-	
-	public void closeVM(String vmIP){
-		//delete VM from OpenNebulaEntries
-		this.headnode.getVmPool().get(vmIP).getVmInstance().delete();
-	}
-	
-	
-
-	public String deserializeString(File file) throws IOException {
-		int len;
-		char[] chr = new char[4096];
-		final StringBuffer buffer = new StringBuffer();
-		final FileReader reader = new FileReader(file);
-		try {
-			while ((len = reader.read(chr)) > 0) {
-				buffer.append(chr, 0, len);
-			}
-		} finally {
-			reader.close();
-		}
-		return buffer.toString();
-	}
 
 	// send to Client message ( spawns a thread)
 	public void sendUserMessage(ReplyMessage message) {
 
 		final ReplyMessage reply = message;
-
 		new Thread() {
 			public void run() {
-
 				try {
 					System.out.println("sendUserMessage: Sending to "
 							+ reply.getReceiverID());
@@ -504,38 +504,12 @@ public class VmMonitor implements Runnable {
 				}
 			}
 		}.start();
-
 	}
 
-	public void logStatus(String input) {
-
-		try (PrintWriter out = new PrintWriter(new BufferedWriter(
-				new FileWriter("logger.txt", true)))) {
-			// String logWorld = "----------"; // according to the needed output
-			System.out.println("Now printing VMpool");
-			out.println("Now printing VMpool");
-
-			for (Iterator<Entry<String, VMStats>> it = this.getVmPool()
-					.entrySet().iterator(); it.hasNext();) {
-				Entry<String, VMStats> entry = it.next();
-				System.out.println(entry.toString());
-				out.println(entry.toString());
-			}
-			/*
-			 * System.out.println("Now printing VMusers"); for
-			 * (Iterator<Entry<String, ArrayList<RegisteredUser>>> it = this
-			 * .getVmUsers().entrySet().iterator(); it.hasNext();) {
-			 * Entry<String, ArrayList<RegisteredUser>> entry = it.next();
-			 * System.out.println(entry.toString()); }
-			 */
-
-			// logger.add(logWorld);
-
-		} catch (IOException e) {
-			e.printStackTrace();
-		}
-	}
-
+	/*---------------------------------------------------
+	 *	COMMON POLICY METHODS - GET STATISTICS
+	 ----------------------------------------------------
+	 */
 	
 	public long getAvgBootingTime(){
 		
@@ -566,6 +540,65 @@ public class VmMonitor implements Runnable {
 				freeSlots+= Constants.MAX_CLIENTS_TO_VM - entry.getNumRegisteredUsers();
 		}
 		return freeSlots;
+	}
+	
+
+	/*---------------------------------------------------
+	 *	COMMON POLICY METHODS - AUXILIARY METHODS
+	 ----------------------------------------------------
+	 */
+
+	public String deserializeString(File file) throws IOException {
+		int len;
+		char[] chr = new char[4096];
+		final StringBuffer buffer = new StringBuffer();
+		final FileReader reader = new FileReader(file);
+		try {
+			while ((len = reader.read(chr)) > 0) {
+				buffer.append(chr, 0, len);
+			}
+		} finally {
+			reader.close();
+		}
+		return buffer.toString();
+	}
+
+
+	public void logStatus(String input) {
+
+		try (PrintWriter out = new PrintWriter(new BufferedWriter(
+				new FileWriter("logger.txt", true)))) {
+			// String logWorld = "----------"; // according to the needed output
+			System.out.println("Now printing VMpool");
+			out.println("Now printing VMpool");
+
+			for (Iterator<Entry<String, VMStats>> it = this.getVmPool()
+					.entrySet().iterator(); it.hasNext();) {
+				Entry<String, VMStats> entry = it.next();
+				System.out.println(entry.toString());
+				out.println(entry.toString());
+			}
+			/*
+			 * System.out.println("Now printing VMusers"); for
+			 * (Iterator<Entry<String, ArrayList<RegisteredUser>>> it = this
+			 * .getVmUsers().entrySet().iterator(); it.hasNext();) {
+			 * Entry<String, ArrayList<RegisteredUser>> entry = it.next();
+			 * System.out.println(entry.toString()); }
+			 */
+
+			// logger.add(logWorld);
+
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+	}
+	
+	public RequestMessage popFromRequestQueue() {
+		RequestMessage request = this.getRequestQueue().get(0);
+
+		this.getRequestQueue().remove(0);
+		return request;
+
 	}
 	
 	

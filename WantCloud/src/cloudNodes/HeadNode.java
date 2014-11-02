@@ -169,7 +169,7 @@ public class HeadNode {
 	// deletes the registered user
 	public boolean deleteUser(RegisteredUser user) {
 
-		System.out.println("User " + user.getId() + " and IP: "
+		System.out.println("deleteUser: User " + user.getId() + " and IP: "
 				+ user.getVmIPofUser() + " is going to be removed");
 
 		ArrayList<RegisteredUser> group = this.getVmUsers().get(
@@ -229,6 +229,8 @@ public class HeadNode {
 		this.completedJobs++;
 		this.setAvgCompletionTime(this.avgCompletionTime * ((double)(this.completedJobs-1))/this.completedJobs 
 				+ (double) (execTime) / this.completedJobs);
+		
+		System.out.println("updateAvgJobCompletion: New userTime: "+ execTime +", New avgJobCompletion = "+ this.getAvgCompletionTime());
 	}
 
 	/*---------------------------------------------------

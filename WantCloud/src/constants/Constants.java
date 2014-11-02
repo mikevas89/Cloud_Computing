@@ -16,7 +16,7 @@ public class Constants {
 	
 	public static final long PING_MONITOR_CHECKING_PERIOD =PING_PERIOD /5;
 	public static final long PING_TIMEOUT =PING_PERIOD *8;
-	public static final long VM_MONITOR_PERIOD = 1000;
+	public static final long VM_MONITOR_PERIOD = 5000;
 	
 	public static final int EXPONENTIAL_MEAN = 5;
 	public static final int EXPONENTIAL_SEED = 123456;
