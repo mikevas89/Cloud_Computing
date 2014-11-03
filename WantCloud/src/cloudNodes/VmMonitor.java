@@ -124,14 +124,15 @@ public class VmMonitor implements Runnable {
 
 		//handle the priority users if any
 		this.handlePUsers();
-		//check if new VMs have to be allocated
-		this.scheduleVMAllocations();
-
+		
 		System.out.println("applyAdvancedPolicy: "+ this.getRequestQueue().size()+ " regular requests have to be handled");
 		// handle all regular Requests than can be assigned to existing VMs 
 		while (!this.getRequestQueue().isEmpty() && this.availableAdvancedVM())
 			this.assignVMToUser(this.getAvailableAdvancedVM(),
 					this.popFromRequestQueue());
+		
+		//check if new VMs have to be allocated
+		this.scheduleVMs();
 	}
 
 	/*---------------------------------------------------
@@ -324,7 +325,135 @@ public class VmMonitor implements Runnable {
 		}
 	}
 	
+	public void scheduleVMs() {
+		// TODO: put the handle of the requests before calling this function
+
+		//current requests + predicted requests
+		int allRequests = this.getRequestQueue().size() + this.getUserRequestRatio();
+
+		System.out.println("scheduleVMAllocations: allRequests: "+ allRequests 
+								+ " real Requests: " + this.getRequestQueue().size() + " predicted :" + this.getUserRequestRatio());
+		
+		//there are empty rooms for all possible requests
+		if(allRequests - this.freeSlotsFromRunningVMs()<=0){
+			//only if the free extra slots are over the MAX_CLIENTS_TO_VM, check to delete idle VMs
+			if(this.freeSlotsFromRunningVMs() - allRequests >=Constants.MAX_CLIENTS_TO_VM)
+				this.handleIdleVMs();
+			return ;
+		}
+		//latencies of future available rooms
+		ArrayList<Long> latencies = new ArrayList<Long>();
+		
+		//available rooms if booting Vms exist
+		for (Iterator<Entry<String, VMStats>> it = this.getVmPool().entrySet().iterator(); 
+				it.hasNext();) {
+			VMStats entry = it.next().getValue();
+			if (entry.getVmStatus() == VMstatus.Booting){
+				for(int i=0; i<Constants.MAX_CLIENTS_TO_VM;i++)
+					latencies.add(entry.getTimeOfAllocation() + this.headnode.getAvgBootingTime() - System.currentTimeMillis());
+			}
+		}
+		
+		System.out.println("scheduleVMAllocations: After counting rooms from booting VMs, free rooms : "+ latencies.size());
+		
+		//calculate latencies from existing jobs
+		for (Iterator<Entry<String, VMStats>> it = this.getVmPool().entrySet().iterator(); 
+				it.hasNext();) {
+			VMStats entry = it.next().getValue();
+			if (entry.getVmStatus() == VMstatus.Running){
+				//add registered users from running VMs 
+				if(entry.getNumRegisteredUsers() > 0){
+					ArrayList<RegisteredUser> users = this.getVmUsers().get(entry.getVmIP());
+					for(RegisteredUser user: users)
+						latencies.add(user.getRegistrationTime() + this.headnode.getAvgCompletionTime() - System.currentTimeMillis());
+				}
+				//add free rooms from running VMs with latency=0
+				for(int i=0; i<Constants.MAX_CLIENTS_TO_VM - entry.getNumRegisteredUsers();i++)
+					latencies.add((long) 0);
+			}
+		}
+		
+		System.out.println("scheduleVMAllocations size of LatenciesList: "+latencies.size());
+		System.out.println("scheduleVMAllocations Latencies:"+latencies.toString());
+		
+		// sort latencies to find the minimum latencies
+		if(!latencies.isEmpty())
+			Collections.sort(latencies);
+		
+		this.advancedAllocation(allRequests, this.cloneList(latencies));
+
+	}
 	
+	
+	
+	public void advancedAllocation(int numRequests, ArrayList<Long> latencies){
+		
+		System.out.println("advancedAllocation : Enter with numRequests "+ numRequests + " and size of latencies "+ latencies.size());
+		System.out.println("advancedAllocation : Enter with latencies "+ latencies);
+		Pair<Integer,Long> maxLatency = getNumRoomsWithSmallLatency(latencies);
+		int numRoomsWithSmallLatency = maxLatency.getLeft();
+		System.out.println("advancedAllocation : Function returned "+ numRoomsWithSmallLatency 
+				+ " rooms with smaller latency than BootTime="+this.headnode.getAvgBootingTime() );
+		if(numRoomsWithSmallLatency==0){
+			this.allocateNewVMs(numRequests);
+			return;
+		}
+		//free rooms for current requests
+		if(numRequests <= numRoomsWithSmallLatency){
+			System.out.println("advancedAllocation : Function returns with no actions"); 
+			return;
+		}
+		else{
+			System.out.println("advancedAllocation : Checking available rooms for "+ (numRequests-numRoomsWithSmallLatency) + " requests"); 
+			this.advancedAllocation(
+					numRequests-numRoomsWithSmallLatency,
+					createNewLatencies(latencies,this.headnode.getAvgCompletionTime()));		
+		}
+	}
+	
+	
+	//return (num, latency) where num is the #rooms in the system whose latency < BootTime
+	public Pair<Integer, Long> getNumRoomsWithSmallLatency(ArrayList<Long> latencies){
+		
+		int availableRooms=0;
+		
+		if(latencies.isEmpty())
+			return (new Pair<Integer,Long>(availableRooms,(long)0));
+		
+		for(int i=0; i<latencies.size() && latencies.get(i)<=this.headnode.getAvgBootingTime();i++)
+			availableRooms++;
+		
+		
+		System.out.println("getNumRoomsWithSmallLatency : Found "+ availableRooms 
+									+ " rooms with smaller latency than BootTime="+this.headnode.getAvgBootingTime() );
+		//returns the largest latency which is smaller than Boot time
+		//if the requests are more than the rooms in the system, return the largest latency 
+		if(availableRooms>0)
+			return (new Pair<Integer,Long>(availableRooms,latencies.get(availableRooms-1)));
+		else
+			return (new Pair<Integer,Long>(availableRooms,(long)0));
+	}
+	
+
+	
+	public void allocateNewVMs(int numNewVMs) {
+
+		System.out.println("allocateNewVMs : New VMS have to be opened, num =: "
+				+ (int) Math.ceil((double) numNewVMs/ Constants.MAX_CLIENTS_TO_VM));
+
+		// allocate number of VMs according to restRequestsWithoutBootingVMs
+		for (int i = 0; i < (int) Math.ceil((double) numNewVMs/ Constants.MAX_CLIENTS_TO_VM); i++) {
+			new Thread() {
+				public void run() {
+					// calls the openNebula to return a new VM
+					String vmIP = allocateVM(HeadNode.getOpenNebula());
+					System.out.println("allocateNewVMs: VM successfully allocated with IP:"
+									+ vmIP);
+				}
+			}.start();
+		}
+	}
+
 	
 
 	/*---------------------------------------------------
@@ -566,6 +695,15 @@ public class VmMonitor implements Runnable {
 		return freeSlots;
 	}
 	
+	public ArrayList<Long> createNewLatencies(ArrayList<Long> list, long additionalValue){
+		ArrayList<Long> newList = this.cloneList(list);
+		System.out.println("createNewLatencies : additional Value = "+additionalValue+" newList="+ newList.toString());
+		for(int i=0; i<newList.size();i++){
+			newList.set(i, newList.get(i)+ additionalValue);
+		}
+		return newList;	
+	}
+	
 
 	/*---------------------------------------------------
 	 *	COMMON POLICY METHODS - AUXILIARY METHODS
@@ -622,8 +760,14 @@ public class VmMonitor implements Runnable {
 
 		this.getRequestQueue().remove(0);
 		return request;
-
 	}
+	
+	public ArrayList<Long> cloneList(ArrayList<Long> source){
+		ArrayList<Long> dest = new ArrayList<Long>();
+		dest.addAll(source);
+		return dest;
+	}
+	
 	
 	
 

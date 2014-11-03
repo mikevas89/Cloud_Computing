@@ -18,6 +18,9 @@ public class Constants {
 	public static final long PING_TIMEOUT =PING_PERIOD *2000;
 	public static final long VM_MONITOR_PERIOD = 5000;
 	
+	public static final long INITIAL_BOOT_TIME = 100000;
+	public static final long INTIAL_COMPLETION_TIME = INITIAL_BOOT_TIME/2;
+	
 	public static final int EXPONENTIAL_MEAN = 25;
 	public static final int EXPONENTIAL_SEED = 123456;
 	

@@ -229,7 +229,7 @@ public class HeadNode {
 	public void updateAvgJobCompletion(long execTime){
 		this.completedJobs++;
 		this.setAvgCompletionTime(this.avgCompletionTime * ((double)(this.completedJobs-1))/this.completedJobs 
-				+ (double) (execTime) / this.completedJobs);
+				+ ((double) (execTime)) / this.completedJobs);
 		
 		System.out.println("updateAvgJobCompletion: New userTime: "+ execTime +", New avgJobCompletion = "+ this.getAvgCompletionTime());
 	}
@@ -420,10 +420,7 @@ public class HeadNode {
 	public long getWindowTimeForRatio() {
 		return windowTimeForRatio;
 	}
-	
-	public void addToSumBootingTimes(long bootingTime){
-		this.sumBootingTimes += bootingTime; 
-	}
+
 
 	public void setSumRequestRatio(int avgRequestRatio) {
 		this.sumAvgRequestRatio = avgRequestRatio;
@@ -465,6 +462,11 @@ public class HeadNode {
 	public long getSumBootingTimes() {
 		return sumBootingTimes;
 	}
+	
+	
+	public void addToSumBootingTimes(long bootingTime){
+		this.sumBootingTimes += bootingTime; 
+	}
 
 	public void setSumBootingTimes(long sumBootingTimes) {
 		this.sumBootingTimes = sumBootingTimes;
@@ -479,6 +481,9 @@ public class HeadNode {
 	}
 	
 	public long getAvgBootingTime() {
+		
+		if(this.getSumBootingTimes()==0)
+			return Constants.INITIAL_BOOT_TIME;
 
 		return Math.round((double) this.getSumBootingTimes()
 				/ this.getNumBootingTimes());
