@@ -53,9 +53,13 @@ public class HeadNode {
 	private int numWindowRequestsForRatio;
 	private long windowTimeForRatio;
 	
+	//calculate average boot time
 	private long sumBootingTimes;
 	private long numBootingTimes;
 	
+	
+	private long systemTimeStart;
+	private int refreshAveragesTimes;
 	
 	// Logger
 	// TODO : put logStatus() to right places
@@ -67,6 +71,8 @@ public class HeadNode {
 
 	public HeadNode() {
 		
+		this.setSystemTimeStart(System.currentTimeMillis());
+		this.setRefreshAveragesTimes(1);
 		
 		//initialization of variables
 		this.setCompletedJobs(0);
@@ -114,7 +120,7 @@ public class HeadNode {
 		 Create thread for monitoring the VMs
 		 ----------------------------------------------------
 		 */
-		Runnable VmMonitor = new VmMonitor(this, Policy.Advanced);
+		Runnable VmMonitor = new VmMonitor(this, Policy.Simple);
 		new Thread(VmMonitor).start();
 
 	}
@@ -143,6 +149,7 @@ public class HeadNode {
 				// deletes the registered user from the VM IP that user sent
 				this.deleteUser(new RegisteredUser(request.getSenderID(),
 						request.getVmIP(),0));
+				System.out.println("COMPLETION "+ System.currentTimeMillis()+" "+request.getExecutionJobTime()+ " "+request.getSenderID());
 				this.updateAvgJobCompletion(request.getExecutionJobTime());
 				break;
 			default:
@@ -180,15 +187,6 @@ public class HeadNode {
 		return group.remove(user)
 				&& vmStats.setNumRegisteredUsers(vmStats
 						.getNumRegisteredUsers() - 1);
-	}
-
-	// policies to choose suitable VMs
-	public String choosePolicy() {
-
-		// TODO:returns null if a new VM has to be allocated or IP according to
-		// some scheduling rules
-		return null;
-
 	}
 
 	// send to Client message ( spawns a thread)
@@ -488,6 +486,22 @@ public class HeadNode {
 		return Math.round((double) this.getSumBootingTimes()
 				/ this.getNumBootingTimes());
 	}
-	
+
+	public long getSystemTimeStart() {
+		return systemTimeStart;
+	}
+
+	public void setSystemTimeStart(long systemTimeStart) {
+		this.systemTimeStart = systemTimeStart;
+	}
+
+	public int getRefreshAveragesTimes() {
+		return refreshAveragesTimes;
+	}
+
+	public void setRefreshAveragesTimes(int refreshAveragesTimes) {
+		this.refreshAveragesTimes = refreshAveragesTimes;
+	}
+
 
 }

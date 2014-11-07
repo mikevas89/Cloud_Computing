@@ -31,34 +31,6 @@ public class VMStats {
 		this.firstPing = 0;
 	}
 
-
-/*
-	public float capacity(){
-		return (float) this.getNumRegisteredUsers() / Constants.MAX_CLIENTS_TO_VM;
-	}
-	
-	public float additiveCapacityOfUser(){
-		return (float) 1.0 / Constants.MAX_CLIENTS_TO_VM;
-	}
-	
-	public boolean normalCapacity(){
-		return this.capacity() < Constants.VM_CAPACITY_NORMAL_THRESHOLD;
-	}
-	
-	public boolean checkNormalCapacity(float additiveCapacity){
-		return this.capacity()+ additiveCapacity > Constants.VM_CAPACITY_NORMAL_THRESHOLD;
-	}
-	
-	public boolean hasNormalCapacityAddingOneUser(){
-		return this.capacity()+ this.additiveCapacityOfUser() < Constants.VM_CAPACITY_NORMAL_THRESHOLD;
-	}
-		
-	public boolean notfullCapacity(){
-		return this.capacity() <= Constants.VM_CAPACITY_FULL_THRESHOLD;
-	}
-	*/
-
-	
 	
 	public int getVmID() {
 		return vmID;

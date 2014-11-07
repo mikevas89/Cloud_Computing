@@ -39,8 +39,8 @@ public class PingMonitor implements Runnable {
 				e.printStackTrace();
 			}
 		
-			
-			this.logVMPool();
+			//print it every second
+			this.printNumVMsLog();
 
 			
 			for(Iterator<Entry<String,VMStats>> it= this.getVmPool().entrySet().iterator();it.hasNext();){
@@ -53,6 +53,9 @@ public class PingMonitor implements Runnable {
 					entry.getValue().setTimeToGetReady(entry.getValue().getFirstPing() - entry.getValue().getTimeOfAllocation());
 					entry.getValue().setStartTimeWithNoUsers(System.currentTimeMillis());
 					System.out.println("PING MONITOR SET TO RUNNING:"+entry.getKey());
+					
+					this.printBootTimeLog(entry.getValue());
+					
 					this.headnode.addToSumBootingTimes(entry.getValue().getTimeToGetReady());
 					this.headnode.setNumBootingTimes(this.headnode.getNumBootingTimes() + 1);
 					System.out.println("PingMonitor: New sumBootingTimes="+this.headnode.getSumBootingTimes()
@@ -72,6 +75,28 @@ public class PingMonitor implements Runnable {
 			}
 		}
 	}
+	
+	
+	public void printBootTimeLog(VMStats entry){
+		System.out.println("BOOTTIME 1 "+ entry.getTimeToGetReady());
+	}
+	
+	public void printNumVMsLog(){
+	
+		int userJobs=0;
+		//get number of Registered users to all VMs
+		 for(Iterator<Entry<String, ArrayList<RegisteredUser>>> it = this.getVmUsers().entrySet()
+				 .iterator(); it.hasNext();) {
+			 userJobs+= it.next().getValue().size();
+		 }
+		 
+		 //get number of users to waiting queue
+		 userJobs += this.headnode.getRequestQueue().size();
+		
+		System.out.println("VMS "+System.currentTimeMillis()+" "+this.headnode.getVmPool().size()+" "+ ((double)userJobs / Constants.MAX_CLIENTS_TO_VM));
+	}
+	
+	
 	
 	public void logVMPool(){
 		

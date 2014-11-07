@@ -61,11 +61,9 @@ public class User implements Runnable {
 
 	public void run() {
 
-		System.out.println("Thread: " + this.id + " created");
 		// request a VM
 
 
-		
 		while (!jobFinished) {
 			
 			try {
