@@ -6,15 +6,10 @@ public class RequestMessage extends Message implements java.io.Serializable{
 
 	private RequestType requestType;
 	private String vmIP;
+	private long executionJobTime;
 	
-	public RequestType getRequestType() {
-		return requestType;
-	}
-
-	public void setRequestType(RequestType requestType) {
-		this.requestType = requestType;
-	}
-
+	
+	
 	
 	private static final long serialVersionUID = 1L;
 
@@ -28,6 +23,19 @@ public class RequestMessage extends Message implements java.io.Serializable{
 		this.requestType = mesg.getRequestType();
 	}
 
+	
+	
+	
+	
+	
+	public RequestType getRequestType() {
+		return requestType;
+	}
+
+	public void setRequestType(RequestType requestType) {
+		this.requestType = requestType;
+	}
+
 	public String getVmIP() {
 		return vmIP;
 	}
@@ -35,6 +43,16 @@ public class RequestMessage extends Message implements java.io.Serializable{
 	public void setVmIP(String vmIP) {
 		this.vmIP = vmIP;
 	}
+
+	public long getExecutionJobTime() {
+		return executionJobTime;
+	}
+
+	public void setExecutionJobTime(long executionJobTime) {
+		this.executionJobTime = executionJobTime;
+	}
+	
+	
 
 
 }

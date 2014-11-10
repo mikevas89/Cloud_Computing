@@ -16,9 +16,12 @@ public class UserCreator {
 	
 	ExponentialDistribution expGen;
 	UniformIntegerDistribution uniGen;
+	
+	private long userCreatorSystemStart;
 
 	public UserCreator() {
 		this.setUserID(1);
+		this.setUserCreatorSystemStart(System.currentTimeMillis());
 	}
 
 	public static void main(String[] args) {
@@ -53,6 +56,11 @@ public class UserCreator {
 		this.setUniGen(new UniformIntegerDistribution(rngUni,0, 1));
 
 		while (true) {
+			//check the lifetime of the userCreator
+			if(System.currentTimeMillis() - this.getUserCreatorSystemStart() > Constants.USER_CREATOR_LIFETIME)
+				break;
+			
+			
 			//create users per minute according to exponential distribution
 			
 			long num = Math.round(this.getExpGen().sample());
@@ -60,6 +68,7 @@ public class UserCreator {
 			while(num == 0){
 				num = Math.round(this.getExpGen().sample());
 			}
+			
 			this.createUsersForMinute(num);
 		}
 	
@@ -69,9 +78,13 @@ public class UserCreator {
 	public void createUsersForMinute(long num){
 		
 		long numUsers = num;
-		long timeToSleepPerUser = Math.round((60* 1000 / numUsers));
+		long timeToSleepPerUser;
+		if(numUsers==0)
+			timeToSleepPerUser = Math.round((60* 1000 ));
+		else
+			timeToSleepPerUser = Math.round((60* 1000 / numUsers));
 		
-		System.out.println("Create "+ numUsers + " users for this minute");
+		System.out.println("----->CREATE users for this minute --->"+ numUsers );
 		
 		while(numUsers>0){
 			try {
@@ -127,6 +140,14 @@ public class UserCreator {
 
 	public void setUniGen(UniformIntegerDistribution uniGen) {
 		this.uniGen = uniGen;
+	}
+
+	public long getUserCreatorSystemStart() {
+		return userCreatorSystemStart;
+	}
+
+	public void setUserCreatorSystemStart(long userCreatorSystemStart) {
+		this.userCreatorSystemStart = userCreatorSystemStart;
 	}
 
 }

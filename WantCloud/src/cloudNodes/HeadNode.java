@@ -18,6 +18,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 
 import communication.ServerRMI;
 import constants.Constants;
+import constants.Pair;
 import constants.Policy;
 import constants.RegisteredUser;
 import constants.VMStats;
@@ -36,7 +37,30 @@ public class HeadNode {
 	private ConcurrentHashMap<String, VMStats> vmPool; // statistics of VM
 
 	private CopyOnWriteArrayList<RequestMessage> requestQueue;
+	
+	private CopyOnWriteArrayList<Pair<Integer,Long>> waitingUsers;
+	private CopyOnWriteArrayList<Pair<Long,Long>> waitingUsersStats;
+	
 
+	//job completion time stats
+	private int completedJobs;
+	private double avgCompletionTime;
+	
+	
+	//user requests stats
+	private int sumAvgRequestRatio;
+	private int numAvgRequestForRatio;
+	private int numWindowRequestsForRatio;
+	private long windowTimeForRatio;
+	
+	//calculate average boot time
+	private long sumBootingTimes;
+	private long numBootingTimes;
+	
+	
+	private long systemTimeStart;
+	private int refreshAveragesTimes;
+	
 	// Logger
 	// TODO : put logStatus() to right places
 	// private Vector<String> logger;
@@ -46,12 +70,26 @@ public class HeadNode {
 	public ServerRMI comm;
 
 	public HeadNode() {
+		
+		this.setSystemTimeStart(System.currentTimeMillis());
+		this.setRefreshAveragesTimes(1);
+		
+		//initialization of variables
+		this.setCompletedJobs(0);
+		this.setAvgCompletionTime(0);
+		this.setSumRequestRatio(0);
+		this.setNumAvgRequestForRatio(0);
+		this.setNumWindowRequestsForRatio(0);
+		this.setWindowTimeForRatio(System.currentTimeMillis());
+		
 
 		// initialize control structures
 		requests = new LinkedBlockingQueue<RequestMessage>();
 		vmUsers = new ConcurrentHashMap<String, ArrayList<RegisteredUser>>();
 		vmPool = new ConcurrentHashMap<String, VMStats>();
 		requestQueue = new CopyOnWriteArrayList<RequestMessage>();
+		waitingUsers = new CopyOnWriteArrayList<Pair<Integer, Long>>();
+		waitingUsersStats = new CopyOnWriteArrayList<Pair<Long, Long>>();
 		// logger = new Vector<String>();
 
 		// create openNebula client
@@ -76,15 +114,13 @@ public class HeadNode {
 		 Create thread for monitoring the pings from the VMs
 		 ----------------------------------------------------
 		 */
-		Runnable pingMonitor = new PingMonitor(this.getVmPool(),
-				this.getVmUsers());
+		Runnable pingMonitor = new PingMonitor(this);
 		new Thread(pingMonitor).start();
 		/*----------------------------------------------------
 		 Create thread for monitoring the VMs
 		 ----------------------------------------------------
 		 */
-		Runnable VmMonitor = new VmMonitor(this.getVmPool(), this.getVmUsers(),
-				this.getRequestQueue(), Policy.Simple);
+		Runnable VmMonitor = new VmMonitor(this, Policy.Simple);
 		new Thread(VmMonitor).start();
 
 	}
@@ -112,7 +148,9 @@ public class HeadNode {
 			case DeleteUser:
 				// deletes the registered user from the VM IP that user sent
 				this.deleteUser(new RegisteredUser(request.getSenderID(),
-						request.getVmIP()));
+						request.getVmIP(),0));
+				System.out.println("COMPLETION "+ System.currentTimeMillis()+" "+request.getExecutionJobTime()+ " "+request.getSenderID());
+				this.updateAvgJobCompletion(request.getExecutionJobTime());
 				break;
 			default:
 				break;
@@ -126,9 +164,9 @@ public class HeadNode {
 
 		final RequestMessage request = message;
 
-		// check VM if available room for new job
-		// String availableVMIP = this.choosePolicy();
-
+		//new request for time window
+		this.numWindowRequestsForRatio++;		
+		
 		// add request to request queue
 		this.getRequestQueue().add(request);
 
@@ -139,7 +177,7 @@ public class HeadNode {
 	// deletes the registered user
 	public boolean deleteUser(RegisteredUser user) {
 
-		System.out.println("User " + user.getId() + " and IP: "
+		System.out.println("deleteUser: User " + user.getId() + " and IP: "
 				+ user.getVmIPofUser() + " is going to be removed");
 
 		ArrayList<RegisteredUser> group = this.getVmUsers().get(
@@ -149,15 +187,6 @@ public class HeadNode {
 		return group.remove(user)
 				&& vmStats.setNumRegisteredUsers(vmStats
 						.getNumRegisteredUsers() - 1);
-	}
-
-	// policies to choose suitable VMs
-	public String choosePolicy() {
-
-		// TODO:returns null if a new VM has to be allocated or IP according to
-		// some scheduling rules
-		return null;
-
 	}
 
 	// send to Client message ( spawns a thread)
@@ -185,11 +214,22 @@ public class HeadNode {
 	public boolean putRequestToQueue(RequestMessage request) {
 		try {
 			this.requests.put(request);
+			//put to waitingUsers list
+			this.getWaitingUsers().add(new Pair<Integer, Long>(request.getSenderID(),System.currentTimeMillis()));
 			return true;
 		} catch (InterruptedException e) {
 			e.printStackTrace();
 			return false;
 		}
+	}
+	
+	//re-calculate average of job execution times
+	public void updateAvgJobCompletion(long execTime){
+		this.completedJobs++;
+		this.setAvgCompletionTime(this.avgCompletionTime * ((double)(this.completedJobs-1))/this.completedJobs 
+				+ ((double) (execTime)) / this.completedJobs);
+		
+		System.out.println("updateAvgJobCompletion: New userTime: "+ execTime +", New avgJobCompletion = "+ this.getAvgCompletionTime());
 	}
 
 	/*---------------------------------------------------
@@ -343,5 +383,125 @@ public class HeadNode {
 		}
 		return;
 	}
+
+	public int getCompletedJobs() {
+		return completedJobs;
+	}
+
+	public long getAvgCompletionTime() {
+		if(this.avgCompletionTime == 0)
+			return this.getAvgBootingTime();
+		else
+			return Math.round(avgCompletionTime);
+	}
+
+	public void setCompletedJobs(int completedJobs) {
+		this.completedJobs = completedJobs;
+	}
+
+	public void setAvgCompletionTime(double avgCompletionTime) {
+		this.avgCompletionTime = avgCompletionTime;
+	}
+
+	public int getSumRequestRatio() {
+		return sumAvgRequestRatio;
+	}
+	
+	public void addToSumRequestRatio(int requests) {
+		this.sumAvgRequestRatio  = this.sumAvgRequestRatio + requests;
+	}
+
+	public int getNumWindowRequestsForRatio() {
+		return numWindowRequestsForRatio;
+	}
+
+	public long getWindowTimeForRatio() {
+		return windowTimeForRatio;
+	}
+
+
+	public void setSumRequestRatio(int avgRequestRatio) {
+		this.sumAvgRequestRatio = avgRequestRatio;
+	}
+
+	public void setNumWindowRequestsForRatio(int numRequestsForRatio) {
+		this.numWindowRequestsForRatio = numRequestsForRatio;
+	}
+
+	public void setWindowTimeForRatio(long windowTimeForRatio) {
+		this.windowTimeForRatio = windowTimeForRatio;
+	}
+	public int getNumAvgRequestForRatio() {
+		return numAvgRequestForRatio;
+	}
+
+	public void setNumAvgRequestForRatio(int numAvgRequestForRatio) {
+		this.numAvgRequestForRatio = numAvgRequestForRatio;
+	}
+
+	public CopyOnWriteArrayList<Pair<Integer, Long>> getWaitingUsers() {
+		return waitingUsers;
+	}
+
+	public CopyOnWriteArrayList<Pair<Long, Long>> getWaitingUsersStats() {
+		return waitingUsersStats;
+	}
+
+	public void setWaitingUsers(
+			CopyOnWriteArrayList<Pair<Integer, Long>> waitingUsers) {
+		this.waitingUsers = waitingUsers;
+	}
+
+	public void setWaitingUsersStats(
+			CopyOnWriteArrayList<Pair<Long, Long>> waitingUsersStats) {
+		this.waitingUsersStats = waitingUsersStats;
+	}
+
+	public long getSumBootingTimes() {
+		return sumBootingTimes;
+	}
+	
+	
+	public void addToSumBootingTimes(long bootingTime){
+		this.sumBootingTimes += bootingTime; 
+	}
+
+	public void setSumBootingTimes(long sumBootingTimes) {
+		this.sumBootingTimes = sumBootingTimes;
+	}
+
+	public long getNumBootingTimes() {
+		return numBootingTimes;
+	}
+
+	public void setNumBootingTimes(long numBootingTimes) {
+		this.numBootingTimes = numBootingTimes;
+	}
+	
+	public long getAvgBootingTime() {
+		
+		if(this.getSumBootingTimes()==0)
+			return Constants.INITIAL_BOOT_TIME;
+
+		return Math.round((double) this.getSumBootingTimes()
+				/ this.getNumBootingTimes());
+	}
+
+	public long getSystemTimeStart() {
+		return systemTimeStart;
+	}
+
+	public void setSystemTimeStart(long systemTimeStart) {
+		this.systemTimeStart = systemTimeStart;
+	}
+
+	public int getRefreshAveragesTimes() {
+		return refreshAveragesTimes;
+	}
+
+	public void setRefreshAveragesTimes(int refreshAveragesTimes) {
+		this.refreshAveragesTimes = refreshAveragesTimes;
+	}
+
 
 }

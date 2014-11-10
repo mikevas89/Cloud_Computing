@@ -20,10 +20,12 @@ public class PingMonitor implements Runnable {
 
 	private ConcurrentHashMap<String,ArrayList<RegisteredUser>> vmUsers; //registered clients
 	private ConcurrentHashMap<String, VMStats> vmPool; //statistics of VM
+	private HeadNode headnode;
 	
-	public PingMonitor( ConcurrentHashMap<String, VMStats> vmPool,ConcurrentHashMap<String,ArrayList<RegisteredUser>> vmUsers) {
-		this.setVmPool(vmPool);
-		this.setVmUsers(vmUsers);
+	public PingMonitor( HeadNode headnode) {
+		this.setHeadnode(headnode);
+		this.setVmPool(headnode.getVmPool());
+		this.setVmUsers(headnode.getVmUsers());
 		
 	}
 
@@ -37,22 +39,35 @@ public class PingMonitor implements Runnable {
 				e.printStackTrace();
 			}
 		
+			//print it every second
+			this.printNumVMsLog();
+
+			
 			for(Iterator<Entry<String,VMStats>> it= this.getVmPool().entrySet().iterator();it.hasNext();){
 				Entry<String, VMStats> entry = it.next();
 				
-				//if the VM was at boot state and ping recieved set it to Run state
+				//if the VM was at boot state and ping received set it to Run state
 				if((entry.getValue().getVmStatus() == VMstatus.Booting) && (entry.getValue().getLastPingSent()!=0)){
 					entry.getValue().setVmStatus(VMstatus.Running);
-					entry.getValue().setFirstPing(System.currentTimeMillis());
+					entry.getValue().setFirstPing(entry.getValue().getLastPingSent());
 					entry.getValue().setTimeToGetReady(entry.getValue().getFirstPing() - entry.getValue().getTimeOfAllocation());
+					entry.getValue().setStartTimeWithNoUsers(System.currentTimeMillis());
 					System.out.println("PING MONITOR SET TO RUNNING:"+entry.getKey());
-					this.logVMPool();
+					
+					this.printBootTimeLog(entry.getValue());
+					
+					this.headnode.addToSumBootingTimes(entry.getValue().getTimeToGetReady());
+					this.headnode.setNumBootingTimes(this.headnode.getNumBootingTimes() + 1);
+					System.out.println("PingMonitor: New sumBootingTimes="+this.headnode.getSumBootingTimes()
+								+ " , sumBootingTimes="+ this.headnode.getNumBootingTimes()
+								+ " , avgBootingTimes="+ this.headnode.getAvgBootingTime());
 				}
 				
 				//check for expired ping
 				long currentTime = System.currentTimeMillis();
 				
 				if ((currentTime - entry.getValue().getLastPingSent()) >= Constants.PING_TIMEOUT && entry.getValue().getVmStatus() == VMstatus.Running) {
+					System.out.println("PingMonitor: DELETE VM " + entry.getKey());
 					//delete all the entries of the VM
 					this.getVmPool().remove(entry.getKey());
 					this.getVmUsers().remove(entry.getKey());
@@ -61,12 +76,34 @@ public class PingMonitor implements Runnable {
 		}
 	}
 	
+	
+	public void printBootTimeLog(VMStats entry){
+		System.out.println("BOOTTIME 1 "+ entry.getTimeToGetReady());
+	}
+	
+	public void printNumVMsLog(){
+	
+		int userJobs=0;
+		//get number of Registered users to all VMs
+		 for(Iterator<Entry<String, ArrayList<RegisteredUser>>> it = this.getVmUsers().entrySet()
+				 .iterator(); it.hasNext();) {
+			 userJobs+= it.next().getValue().size();
+		 }
+		 
+		 //get number of users to waiting queue
+		 userJobs += this.headnode.getRequestQueue().size();
+		
+		System.out.println("VMS "+System.currentTimeMillis()+" "+this.headnode.getVmPool().size()+" "+ ((double)userJobs / Constants.MAX_CLIENTS_TO_VM));
+	}
+	
+	
+	
 	public void logVMPool(){
 		
 		try (PrintWriter out = new PrintWriter(new BufferedWriter(
 				new FileWriter("logger.txt", true)))) {
 			// String logWorld = "----------"; // according to the needed output
-			System.out.println("Now printing VMpool");
+			System.out.println("logVMPool: Now printing VMpool");
 			out.println("Now printing VMpool");
 
 			for (Iterator<Entry<String, VMStats>> it = this.getVmPool()
@@ -102,6 +139,14 @@ public class PingMonitor implements Runnable {
 
 	public void setVmPool(ConcurrentHashMap<String, VMStats> vmPool) {
 		this.vmPool = vmPool;
+	}
+
+	public HeadNode getHeadnode() {
+		return headnode;
+	}
+
+	public void setHeadnode(HeadNode headnode) {
+		this.headnode = headnode;
 	}
 
 }

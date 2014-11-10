@@ -32,6 +32,9 @@ public class User implements Runnable {
 	private int id;
 	private String vmIP;
 	private UserType type;
+	private boolean jobFinished;
+	private RequestType requestType;
+	private long executionTime;
 
 	ClientRMI comm = null;
 	ServerRMI headNode = null;
@@ -39,6 +42,8 @@ public class User implements Runnable {
 	public User(int id, UserType UserT) {
 
 		IPqueue = new LinkedBlockingQueue<String>();
+		this.setJobFinished(false);
+		this.setRequestType(RequestType.RequestVM);
 
 		this.type = UserT;
 		this.id = id;
@@ -56,37 +61,51 @@ public class User implements Runnable {
 
 	public void run() {
 
-		System.out.println("Thread: " + this.id + " created");
 		// request a VM
-		try {
-			this.getServerReg().onMessageReceived(
-					new RequestMessage(this.id, RequestType.RequestVM));
-		} catch (RemoteException e) {
-			e.printStackTrace();
-		} catch (NotBoundException e) {
-			e.printStackTrace();
+
+
+		while (!jobFinished) {
+			
+			try {
+				this.getServerReg().onMessageReceived(
+						new RequestMessage(this.id, this.getRequestType()));
+			} catch (RemoteException e) {
+				e.printStackTrace();
+			} catch (NotBoundException e) {
+				e.printStackTrace();
+			}
+			
+			try {
+				this.setVmIP(this.getIPqueue().take());
+			} catch (InterruptedException e1) {
+				e1.printStackTrace();
+			}
+			
+			executionTime = System.currentTimeMillis();
+
+			// establish ssh connection
+			Connection conn = connectSSH(this.getVmIP());
+			System.out.println("Thread: " + this.id
+					+ " SSH connection established");
+
+			// execute job
+			jobFinished = executeJob(conn);
+			if (!jobFinished) {
+					this.setRequestType(RequestType.PriorityRequest);
+					continue;
+			}
+
+			executionTime = System.currentTimeMillis() - this.executionTime;
+			
+			System.out.println("User "+ this.getId() + ": execTime="+ executionTime);
+			
+			conn.close();
 		}
-
-		try {
-			this.setVmIP(this.getIPqueue().take());
-		} catch (InterruptedException e1) {
-			e1.printStackTrace();
-		}
-
-		// establish ssh connection
-		Connection conn = connectSSH(this.getVmIP());
-		System.out.println("Thread: " + this.id + " SSH connection established");
-
-		// execute job
-		executeJob(conn);
-
-		conn.close();
-
-		
 		 //ask headnode to remove User 
 		try {
 			RequestMessage request = new RequestMessage(this.getId(), RequestType.DeleteUser);
 			request.setVmIP(this.getVmIP());
+			request.setExecutionJobTime(executionTime);
 			this.getServerReg().onMessageReceived(request);
 		} catch (RemoteException e) {
 			e.printStackTrace(); 
@@ -127,9 +146,11 @@ public class User implements Runnable {
 
 	}
 
-	public void executeJob(Connection conn) {
+	@SuppressWarnings("resource")
+	public boolean executeJob(Connection conn) {
 
 		BufferedReader br;
+		String line = null;
 
 		Session sess;
 		try {
@@ -145,20 +166,20 @@ public class User implements Runnable {
 			InputStream stdout = new StreamGobbler(sess.getStdout());
 
 			br = new BufferedReader(new InputStreamReader(stdout));
-			String line;
-			while (true) {
-				line = br.readLine();
-				if (line == null)
-					break;
-				else
-					System.out.println("User: " + this.getId() + " " + line);					
-			}
 
+			line = br.readLine();
+			System.out.println("User: " + this.getId() + " " + line);
+			
 			sess.close();
 
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
+		
+		if(line==null)
+			return false;
+		else
+			return line.equals("Finished");
 
 	}
 
@@ -169,12 +190,12 @@ public class User implements Runnable {
 	 ----------------------------------------------------
 	 */
 	public boolean bindInExistingRegistry(String idName, ClientRMI comm) {
-		System.out.println("bindInExistingRegistry");
+		//System.out.println("bindInExistingRegistry");
 		Registry myRegistry;
 		try {
 			myRegistry = LocateRegistry.getRegistry(Constants.CLIENT_RMI);
 			myRegistry.bind(idName, comm); // bind with their names
-			System.out.println("bindInExistingRegistry completed");
+			//System.out.println("bindInExistingRegistry completed");
 			return true;
 		} catch (RemoteException e) {
 			e.printStackTrace();
@@ -186,15 +207,15 @@ public class User implements Runnable {
 	}
 
 	public boolean createRegistryAndBind(String idName, ClientRMI comm) {
-		System.out.println("createRegistryAndBind");
+		//System.out.println("createRegistryAndBind");
 		Registry myRegistry;
 		try {
 			myRegistry = LocateRegistry.createRegistry(Constants.CLIENT_RMI);
 			myRegistry.rebind(idName, comm); // server's name
-			System.out.println("createRegistryAndBind completed");
+			//System.out.println("createRegistryAndBind completed");
 			return true;
 		} catch (RemoteException e) {
-			System.out.println("createRegistryAndBind failed");
+			//System.out.println("createRegistryAndBind failed");
 			// e.printStackTrace();
 			return false;
 		}
@@ -269,6 +290,22 @@ public class User implements Runnable {
 
 	public void setIPqueue(LinkedBlockingQueue<String> iPqueue) {
 		IPqueue = iPqueue;
+	}
+
+	public boolean isJobFinished() {
+		return jobFinished;
+	}
+
+	public RequestType getRequestType() {
+		return requestType;
+	}
+
+	public void setJobFinished(boolean jobFinished) {
+		this.jobFinished = jobFinished;
+	}
+
+	public void setRequestType(RequestType requestType) {
+		this.requestType = requestType;
 	}
 
 }

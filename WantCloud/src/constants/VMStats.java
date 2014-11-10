@@ -13,11 +13,12 @@ public class VMStats {
 	private long firstPing;
 	private long timeOfAllocation;
 	private long timeToGetReady;
+	private long startTimeWithNoUsers;
 	
 
 	
 	public VMStats(int vmID, VirtualMachine vmInstance, String vmIP,
-			VMstatus vmStatus, int numRegisteredUsers, long timeOfAllocation) {
+			VMstatus vmStatus, int numRegisteredUsers, long timeOfAllocation ,long startTimeWithNoUsers) {
 		this.vmID = vmID;
 		this.vmInstance = vmInstance;
 		this.vmIP = vmIP;
@@ -25,36 +26,11 @@ public class VMStats {
 		this.setLastPingSent(0);
 		this.numRegisteredUsers = numRegisteredUsers;
 		this.timeOfAllocation = timeOfAllocation;
+		this.startTimeWithNoUsers = startTimeWithNoUsers;
+		this.timeToGetReady = 0;
+		this.firstPing = 0;
 	}
 
-
-
-	public float capacity(){
-		return (float) this.getNumRegisteredUsers() / Constants.MAX_CLIENTS_TO_VM;
-	}
-	
-	public float additiveCapacityOfUser(){
-		return (float) 1.0 / Constants.MAX_CLIENTS_TO_VM;
-	}
-	
-	public boolean normalCapacity(){
-		return this.capacity() < Constants.VM_CAPACITY_NORMAL_THRESHOLD;
-	}
-	
-	public boolean checkNormalCapacity(float additiveCapacity){
-		return this.capacity()+ additiveCapacity > Constants.VM_CAPACITY_NORMAL_THRESHOLD;
-	}
-	
-	public boolean hasNormalCapacityAddingOneUser(){
-		return this.capacity()+ this.additiveCapacityOfUser() < Constants.VM_CAPACITY_NORMAL_THRESHOLD;
-	}
-		
-	public boolean notfullCapacity(){
-		return this.capacity() <= Constants.VM_CAPACITY_FULL_THRESHOLD;
-	}
-	
-
-	
 	
 	public int getVmID() {
 		return vmID;
@@ -91,20 +67,23 @@ public class VMStats {
 	}
 	public synchronized boolean setNumRegisteredUsers(int numRegisteredUsers) {
 		this.numRegisteredUsers = numRegisteredUsers;
+		//start timer that VM has no users
+		if(this.numRegisteredUsers==0)
+			this.setStartTimeWithNoUsers(System.currentTimeMillis());
 		return true;
 	}
 
 	
 
 
-
 	@Override
 	public String toString() {
-		return "VMStats [vmID=" + vmID + ", firstPing=" + firstPing
-				+ ", timeOfAllocation=" + timeOfAllocation
-				+ ", timeToGetReady=" + timeToGetReady + "]";
+		return "VMStats [vmID=" + vmID + ", vmIP=" + vmIP + ", vmStatus="
+				+ vmStatus + ", lastPingSent=" + lastPingSent
+				+ ", numRegisteredUsers=" + numRegisteredUsers
+				+ ", timeToGetReady=" + timeToGetReady
+				+ ", startTimeWithNoUsers=" + startTimeWithNoUsers + "]";
 	}
-
 
 
 	public long getFirstPing() {
@@ -139,6 +118,18 @@ public class VMStats {
 
 	public void setTimeToGetReady(long timeToGetReady) {
 		this.timeToGetReady = timeToGetReady;
+	}
+
+
+
+	public long getStartTimeWithNoUsers() {
+		return startTimeWithNoUsers;
+	}
+
+
+
+	public void setStartTimeWithNoUsers(long startTimeWithNoUsers) {
+		this.startTimeWithNoUsers = startTimeWithNoUsers;
 	}
 
 	
